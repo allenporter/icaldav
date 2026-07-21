@@ -100,11 +100,19 @@ class CalDavRouter:
         PROPFIND Purpose:
             The PROPFIND method (RFC 4918 Section 9.1) acts like `ls` / `dir` + `stat`.
             When issued against a collection path (e.g. `/work/`), it discovers collection properties
-            (verifying `DAV:resourcetype` contains `<collection/>` and `<calendar/>`) and, when
-            `Depth: 1` is specified, lists all child calendar items and their ETags (`DAV:getetag`).
+            (verifying `DAV:resourcetype` contains `<collection/>` and `<calendar/>`) and lists child items.
+
+        Depth Header Semantics:
+            - `Depth: 0`: Returns properties for the target collection itself only.
+            - `Depth: 1` (default) or `Depth: infinity`: Returns the collection property node PLUS
+              all immediate child calendar resource nodes and their ETags (`DAV:getetag`).
+            - Why treating `infinity` as `1` is RFC-compliant: RFC 4791 Section 4.1 specifies that
+              Calendar Collections MUST NOT contain nested sub-collections. Because CalDAV calendar
+              collections are strictly flat, `Depth: 1` and `Depth: infinity` yield identical results.
 
         RFC Reference:
             - RFC 4918 Section 9.1: PROPFIND Method.
+            - RFC 4791 Section 4.1: Calendar Collections (non-nesting rule).
             - RFC 4918 Section 13: Multi-Status Response.
 
         Args:
