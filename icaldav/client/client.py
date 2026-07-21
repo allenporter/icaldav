@@ -4,10 +4,14 @@ RFC References:
   - RFC 4918 Section 9.1: PROPFIND Method.
   - RFC 4918 Section 9.7: DELETE Method.
   - RFC 4791 Section 5.2: Calendar Object Resources (GET / PUT).
+  - RFC 7617: HTTP Basic Authentication.
+  - RFC 6750: OAuth 2.0 Bearer Token Usage.
+  - RFC 7235 Section 4.1: WWW-Authenticate Header Field.
 """
 
 import aiohttp
 
+from icaldav.client.exceptions import CalDavAuthError
 from icaldav.xml.propfind import PropfindItem, build_propfind_xml, parse_multistatus_xml
 
 
@@ -17,23 +21,74 @@ class CalDavClient:
     RFC References:
         - RFC 4918: WebDAV Core Protocols.
         - RFC 4791: CalDAV Extensions.
+        - RFC 7617: HTTP Basic Authentication.
+        - RFC 6750: Bearer Tokens.
     """
 
-    def __init__(self, session: aiohttp.ClientSession | None = None) -> None:
-        """Initialize CalDavClient.
+    def __init__(
+        self,
+        session: aiohttp.ClientSession | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        token: str | None = None,
+        auth: aiohttp.BasicAuth | None = None,
+    ) -> None:
+        """Initialize CalDavClient with optional session and credentials.
 
         Args:
             session: Optional existing aiohttp.ClientSession. If None, an internal session is created.
+            username: Optional HTTP Basic Auth username string.
+            password: Optional HTTP Basic Auth password string.
+            token: Optional Bearer authentication token string.
+            auth: Optional pre-configured aiohttp.BasicAuth object.
         """
         self._session = session
         self._owned_session = session is None
+        self.username = username
+        self.password = password
+        self.token = token
+
+        if auth:
+            self.auth = auth
+        elif username and password:
+            self.auth = aiohttp.BasicAuth(username, password)
+        else:
+            self.auth = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Retrieve active ClientSession, instantiating one if needed."""
+        """Retrieve active ClientSession, instantiating one with configured auth if needed."""
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            headers: dict[str, str] = {}
+            if self.token:
+                headers["Authorization"] = f"Bearer {self.token}"
+
+            self._session = aiohttp.ClientSession(
+                auth=self.auth,
+                headers=headers if headers else None,
+            )
             self._owned_session = True
         return self._session
+
+    def _check_response(self, resp: aiohttp.ClientResponse) -> None:
+        """Inspect HTTP response status and raise CalDavAuthError on 401/403 with WWW-Authenticate.
+
+        Args:
+            resp: The aiohttp.ClientResponse object.
+
+        Raises:
+            CalDavAuthError: If HTTP status is 401 or 403.
+            aiohttp.ClientResponseError: For other 4xx/5xx HTTP status codes.
+        """
+        if resp.status in (401, 403):
+            challenges: list[str] = []
+            if "WWW-Authenticate" in resp.headers:
+                challenges = resp.headers.getall("WWW-Authenticate")
+            raise CalDavAuthError(
+                url=str(resp.url),
+                status=resp.status,
+                challenges=challenges,
+            )
+        resp.raise_for_status()
 
     async def close(self) -> None:
         """Close the underlying ClientSession if owned by this client instance."""
@@ -65,7 +120,8 @@ class CalDavClient:
             List of parsed PropfindItem objects.
 
         Raises:
-            aiohttp.ClientResponseError: If the server returns a non-207 status code.
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
+            aiohttp.ClientResponseError: If the server returns another non-207 status code.
         """
         session = await self._get_session()
         body = build_propfind_xml(props or ["resourcetype", "getetag", "displayname"])
@@ -75,7 +131,7 @@ class CalDavClient:
         }
 
         async with session.request("PROPFIND", url, data=body, headers=headers) as resp:
-            resp.raise_for_status()
+            self._check_response(resp)
             content = await resp.read()
             return parse_multistatus_xml(content)
 
@@ -92,13 +148,14 @@ class CalDavClient:
             Tuple of (ics_content_string, etag_string).
 
         Raises:
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
             aiohttp.ClientResponseError: If the HTTP response status is not 200 OK.
         """
         session = await self._get_session()
         headers = {"Accept": "text/calendar, text/plain, */*"}
 
         async with session.get(url, headers=headers) as resp:
-            resp.raise_for_status()
+            self._check_response(resp)
             ics_text = await resp.text()
             etag = resp.headers.get("ETag", "").strip('"')
             return ics_text, etag
@@ -120,6 +177,7 @@ class CalDavClient:
             The server-returned or assigned ETag string.
 
         Raises:
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
             aiohttp.ClientResponseError: If the server rejects the request.
         """
         session = await self._get_session()
@@ -130,7 +188,7 @@ class CalDavClient:
         async with session.put(
             url, data=ics_content.encode("utf-8"), headers=headers
         ) as resp:
-            resp.raise_for_status()
+            self._check_response(resp)
             resp_etag = resp.headers.get("ETag", "").strip('"')
             return resp_etag
 
@@ -145,6 +203,7 @@ class CalDavClient:
             etag: Optional ETag for conditional If-Match check.
 
         Raises:
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
             aiohttp.ClientResponseError: If the deletion fails.
         """
         session = await self._get_session()
@@ -153,4 +212,4 @@ class CalDavClient:
             headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
 
         async with session.delete(url, headers=headers) as resp:
-            resp.raise_for_status()
+            self._check_response(resp)
