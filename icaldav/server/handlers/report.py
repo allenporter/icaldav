@@ -6,13 +6,12 @@ RFC Reference:
     - RFC 4791 Section 7.9: calendar-multiget REPORT.
 """
 
-from functools import wraps
 import logging
-from typing import Any, Callable, Coroutine
 import xml.etree.ElementTree as ET
 from aiohttp import web
 
 from icaldav.filter import matches_comp_filter
+from icaldav.server.handlers.decorators import path_args
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import strip_ns
 from icaldav.xml.report.models import ReportResource
@@ -23,18 +22,6 @@ from icaldav.xml.report.request import (
 from icaldav.xml.report.response import build_report_response
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def path_args(
-    func: Callable[..., Coroutine[Any, Any, web.Response]],
-) -> Callable[..., Coroutine[Any, Any, web.Response]]:
-    """Decorator unpacking request.match_info directly into handler keyword arguments."""
-
-    @wraps(func)
-    async def wrapper(self: Any, request: web.Request) -> web.Response:
-        return await func(self, request, **request.match_info)
-
-    return wrapper
 
 
 class ReportHandler:

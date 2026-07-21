@@ -5,27 +5,14 @@ RFC Reference:
     - RFC 4918 Section 13: Multi-Status Response.
 """
 
-from functools import wraps
-from typing import Any, Callable, Coroutine
 import xml.etree.ElementTree as ET
 from aiohttp import web
 
+from icaldav.server.handlers.decorators import path_args
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import DAV, qname
 from icaldav.xml.propfind.request import parse_propfind_request
 from icaldav.xml.propfind.response import append_propfind_response
-
-
-def path_args(
-    func: Callable[..., Coroutine[Any, Any, web.Response]],
-) -> Callable[..., Coroutine[Any, Any, web.Response]]:
-    """Decorator unpacking request.match_info directly into handler keyword arguments."""
-
-    @wraps(func)
-    async def wrapper(self: Any, request: web.Request) -> web.Response:
-        return await func(self, request, **request.match_info)
-
-    return wrapper
 
 
 class PropfindHandler:

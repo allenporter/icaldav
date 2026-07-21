@@ -4,23 +4,10 @@ RFC Reference:
     - RFC 4791 Section 5.3.1: Creating Calendar Collections.
 """
 
-from functools import wraps
-from typing import Any, Callable, Coroutine
 from aiohttp import web
 
+from icaldav.server.handlers.decorators import path_args
 from icaldav.store.types import LocalStore
-
-
-def path_args(
-    func: Callable[..., Coroutine[Any, Any, web.Response]],
-) -> Callable[..., Coroutine[Any, Any, web.Response]]:
-    """Decorator unpacking request.match_info directly into handler keyword arguments."""
-
-    @wraps(func)
-    async def wrapper(self: Any, request: web.Request) -> web.Response:
-        return await func(self, request, **request.match_info)
-
-    return wrapper
 
 
 class CollectionHandler:
