@@ -8,12 +8,26 @@ RFC References:
   - RFC 4791 Section 5: Calendar Object Resources.
 """
 
+from functools import wraps
 import hashlib
+from typing import Any, Callable, Coroutine
 import xml.etree.ElementTree as ET
 from aiohttp import web
 
 from icaldav.store.types import CalendarResource, LocalStore
 from icaldav.xml.namespaces import CALDAV, DAV, qname
+
+
+def unpack_path_args(
+    func: Callable[..., Coroutine[Any, Any, web.Response]],
+) -> Callable[..., Coroutine[Any, Any, web.Response]]:
+    """Decorator unpacking request.match_info directly into handler keyword arguments."""
+
+    @wraps(func)
+    async def wrapper(self: Any, request: web.Request) -> web.Response:
+        return await func(self, request, **request.match_info)
+
+    return wrapper
 
 
 class CalDavRouter:
@@ -73,7 +87,13 @@ class CalDavRouter:
         }
         return web.Response(status=200, headers=headers)
 
-    async def handle_propfind(self, request: web.Request) -> web.Response:
+    @unpack_path_args
+    async def handle_propfind(
+        self,
+        request: web.Request,
+        collection_id: str = "",
+        resource_id: str | None = None,
+    ) -> web.Response:
         """Handle PROPFIND request for collection listing or single resource stat.
 
         RFC Reference:
@@ -82,12 +102,12 @@ class CalDavRouter:
 
         Args:
             request: The incoming HTTP request.
+            collection_id: Target collection identifier string.
+            resource_id: Optional target resource filename string.
 
         Returns:
             HTTP 207 Multi-Status XML response.
         """
-        collection_id = request.match_info.get("collection_id", "")
-        resource_id = request.match_info.get("resource_id")
         depth = request.headers.get("Depth", "1")
 
         root = ET.Element(
@@ -150,7 +170,10 @@ class CalDavRouter:
         status = ET.SubElement(propstat, qname(DAV, "status"))
         status.text = "HTTP/1.1 200 OK"
 
-    async def handle_get(self, request: web.Request) -> web.Response:
+    @unpack_path_args
+    async def handle_get(
+        self, request: web.Request, collection_id: str, resource_id: str
+    ) -> web.Response:
         """Handle GET request to retrieve a raw calendar object resource.
 
         RFC Reference:
@@ -158,12 +181,12 @@ class CalDavRouter:
 
         Args:
             request: The incoming HTTP request.
+            collection_id: Target collection identifier string.
+            resource_id: Target resource filename string.
 
         Returns:
             HTTP 200 OK with raw .ics payload or 404 Not Found.
         """
-        collection_id = request.match_info["collection_id"]
-        resource_id = request.match_info["resource_id"]
         href = f"/{collection_id}/{resource_id}"
 
         resource = await self.store.get_resource(collection_id, href)
@@ -180,7 +203,10 @@ class CalDavRouter:
             headers=headers,
         )
 
-    async def handle_put(self, request: web.Request) -> web.Response:
+    @unpack_path_args
+    async def handle_put(
+        self, request: web.Request, collection_id: str, resource_id: str
+    ) -> web.Response:
         """Handle PUT request to create or update a calendar object resource.
 
         RFC Reference:
@@ -188,12 +214,12 @@ class CalDavRouter:
 
         Args:
             request: The incoming HTTP request.
+            collection_id: Target collection identifier string.
+            resource_id: Target resource filename string.
 
         Returns:
             HTTP 201 Created or 204 No Content with ETag header.
         """
-        collection_id = request.match_info["collection_id"]
-        resource_id = request.match_info["resource_id"]
         href = f"/{collection_id}/{resource_id}"
 
         body_bytes = await request.read()
@@ -215,7 +241,10 @@ class CalDavRouter:
         headers = {"ETag": f'"{etag}"'}
         return web.Response(status=status, headers=headers)
 
-    async def handle_delete(self, request: web.Request) -> web.Response:
+    @unpack_path_args
+    async def handle_delete(
+        self, request: web.Request, collection_id: str, resource_id: str
+    ) -> web.Response:
         """Handle DELETE request to remove a calendar object resource.
 
         RFC Reference:
@@ -223,12 +252,12 @@ class CalDavRouter:
 
         Args:
             request: The incoming HTTP request.
+            collection_id: Target collection identifier string.
+            resource_id: Target resource filename string.
 
         Returns:
             HTTP 204 No Content or 404 Not Found.
         """
-        collection_id = request.match_info["collection_id"]
-        resource_id = request.match_info["resource_id"]
         href = f"/{collection_id}/{resource_id}"
 
         deleted = await self.store.delete_resource(collection_id, href)
