@@ -20,6 +20,15 @@ This skill guides AI agents and developers on how to interactively serve, query,
 
 ---
 
+## Example Test Data
+
+Use ready-to-use `.ics` files located in `examples/`:
+- `examples/work_meeting.ics`: Single work meeting event (`VEVENT`).
+- `examples/recurring_sync.ics`: Weekly recurring standup meeting (`VEVENT` with `RRULE`).
+- `examples/todo_task.ics`: Action item to-do task (`VTODO`).
+
+---
+
 ## Agent Live Verification Workflow
 
 When developing or verifying new CalDAV capabilities, follow this sequence:
@@ -35,9 +44,10 @@ When developing or verifying new CalDAV capabilities, follow this sequence:
    icaldav client propfind http://127.0.0.1:8888/work
    ```
 
-3. **Upload Calendar Resource (.ics)**:
+3. **Upload Sample Calendar Resource (.ics)**:
+   Upload an example payload from `examples/`:
    ```bash
-   icaldav client put http://127.0.0.1:8888/work/meeting.ics event.ics
+   icaldav client put http://127.0.0.1:8888/work/meeting.ics examples/work_meeting.ics
    ```
 
 4. **Verify Resource Content & ETag**:
