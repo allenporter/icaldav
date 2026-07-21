@@ -19,6 +19,9 @@ dependencies = [
 [project.urls]
 Source = "https://github.com/allenporter/icaldav"
 
+[project.scripts]
+icaldav = "icaldav.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["icaldav*"]
 
