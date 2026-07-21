@@ -129,3 +129,42 @@ class LocalStore(Protocol):
             True if the resource was deleted, False if it did not exist.
         """
         ...
+
+    async def get_resources(self, collection_id: str) -> list[CalendarResource]:
+        """Retrieve all calendar resources in a collection.
+
+        Used by calendar-query REPORT (RFC 4791 §7.8) to load all resources
+        for server-side filtering by component type and time range.
+
+        Args:
+            collection_id: Identifier for the calendar collection.
+
+        Returns:
+            List of all CalendarResource objects in the collection.
+        """
+        ...
+
+    async def collection_exists(self, collection_id: str) -> bool:
+        """Check whether a calendar collection exists in the store.
+
+        Used by MKCALENDAR (RFC 4791 §5.3.1) to prevent duplicate creation,
+        and by REPORT handlers to validate the target collection.
+
+        Args:
+            collection_id: Identifier for the calendar collection.
+
+        Returns:
+            True if the collection exists, False otherwise.
+        """
+        ...
+
+    async def create_collection(self, collection_id: str) -> None:
+        """Create a new empty calendar collection.
+
+        Called by MKCALENDAR (RFC 4791 §5.3.1) to provision a new calendar
+        collection with resource types DAV:collection and CALDAV:calendar.
+
+        Args:
+            collection_id: Identifier for the new calendar collection.
+        """
+        ...

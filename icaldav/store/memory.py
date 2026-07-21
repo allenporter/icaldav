@@ -96,3 +96,34 @@ class MemoryStore(LocalStore):
             del collection[href]
             return True
         return False
+
+    async def get_resources(self, collection_id: str) -> list[CalendarResource]:
+        """Retrieve all calendar resources in a collection.
+
+        Args:
+            collection_id: Identifier for the calendar collection.
+
+        Returns:
+            List of all CalendarResource objects in the collection.
+        """
+        return list(self._resources.get(collection_id, {}).values())
+
+    async def collection_exists(self, collection_id: str) -> bool:
+        """Check whether a calendar collection exists in the store.
+
+        Args:
+            collection_id: Identifier for the calendar collection.
+
+        Returns:
+            True if the collection exists, False otherwise.
+        """
+        return collection_id in self._resources
+
+    async def create_collection(self, collection_id: str) -> None:
+        """Create a new empty calendar collection.
+
+        Args:
+            collection_id: Identifier for the new calendar collection.
+        """
+        if collection_id not in self._resources:
+            self._resources[collection_id] = {}

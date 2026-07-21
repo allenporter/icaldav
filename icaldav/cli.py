@@ -157,6 +157,30 @@ def build_parser() -> argparse.ArgumentParser:
     del_parser.add_argument("url", help="Target calendar resource URL")
     add_auth_flags(del_parser)
 
+    # client query (calendar-query REPORT)
+    query_parser = client_subparsers.add_parser(
+        "query", help="Execute CalDAV calendar-query REPORT"
+    )
+    query_parser.add_argument("url", help="Target collection URL")
+    query_parser.add_argument(
+        "--component",
+        default="VEVENT",
+        help="Component type filter (default: VEVENT)",
+    )
+    query_parser.add_argument("--start", help="UTC start time (e.g. 20260701T000000Z)")
+    query_parser.add_argument("--end", help="UTC end time (e.g. 20260801T000000Z)")
+    add_auth_flags(query_parser)
+
+    # client multiget (calendar-multiget REPORT)
+    multiget_parser = client_subparsers.add_parser(
+        "multiget", help="Execute CalDAV calendar-multiget REPORT"
+    )
+    multiget_parser.add_argument("url", help="Target collection URL")
+    multiget_parser.add_argument(
+        "hrefs", nargs="+", help="Resource href paths to fetch"
+    )
+    add_auth_flags(multiget_parser)
+
     # 4. store
     store_parser = subparsers.add_parser(
         "store", help="Inspect local storage persistence"
@@ -306,6 +330,34 @@ async def run_client_async(args: argparse.Namespace) -> int:
             elif action == "delete":
                 await client.delete_resource(args.url)
                 print(f"Successfully deleted {args.url}")
+            elif action == "query":
+                resources = await client.calendar_query(
+                    args.url,
+                    component=args.component,
+                    time_start=args.start,
+                    time_end=args.end,
+                )
+                print(
+                    f"calendar-query REPORT for {args.url} "
+                    f"(component={args.component}):"
+                )
+                if not resources:
+                    print("  (no matching resources)")
+                for res in resources:
+                    print(f"  - {res.href} [etag: {res.etag}]")
+                    if res.ics_data:
+                        # Print first SUMMARY line if available
+                        for line in res.ics_data.splitlines():
+                            if line.startswith("SUMMARY:"):
+                                print(f"    {line}")
+                                break
+            elif action == "multiget":
+                resources = await client.calendar_multiget(args.url, hrefs=args.hrefs)
+                print(f"calendar-multiget REPORT for {args.url}:")
+                for res in resources:
+                    print(f"  - {res.href} [etag: {res.etag}]")
+                    if res.ics_data:
+                        print(f"    Content:\n{res.ics_data}")
         return 0
     except CalDavAuthError as err:
         print(f"Authentication Error (HTTP {err.status}): {err}", file=sys.stderr)
