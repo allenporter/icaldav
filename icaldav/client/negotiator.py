@@ -147,14 +147,17 @@ class AuthNegotiator:
 
                     # 401 — parse WWW-Authenticate challenges
                     if status == 401:
+                        hostname = urlparse(url).hostname or ""
                         challenges = self._parse_challenges(resp.headers)
                         if not challenges:
+                            if hostname in KNOWN_OAUTH_ISSUERS:
+                                method = await self._resolve_bearer(None, hostname, url)
+                                return [method]
                             _LOGGER.debug(
                                 "401 from %s but no WWW-Authenticate header", url
                             )
                             return [AuthMethod(scheme="unknown")]
 
-                        hostname = urlparse(url).hostname or ""
                         methods: list[AuthMethod] = []
                         for scheme, realm in challenges:
                             method = await self._resolve_challenge(

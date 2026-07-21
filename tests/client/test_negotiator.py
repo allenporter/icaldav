@@ -193,3 +193,42 @@ def test_known_oauth_issuers_mapping() -> None:
     # Fastmail (Basic auth only — empty issuer string)
     assert "caldav.fastmail.com" in KNOWN_OAUTH_ISSUERS
     assert KNOWN_OAUTH_ISSUERS["caldav.fastmail.com"] == ""
+
+
+async def test_probe_bearer_missing_header_known_provider() -> None:
+    """Test 401 response missing WWW-Authenticate header still resolves OAuth for known host."""
+
+    async def handle_discovery(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "issuer": "https://auth.example.com",
+                "authorization_endpoint": "https://auth.example.com/authorize",
+                "token_endpoint": "https://auth.example.com/token",
+            }
+        )
+
+    discovery_app = web.Application()
+    discovery_app.router.add_get("/.well-known/openid-configuration", handle_discovery)
+
+    async def handle_propfind(request: web.Request) -> web.Response:
+        # 401 response without WWW-Authenticate header (like Google CalDAV)
+        return web.Response(status=401)
+
+    caldav_app = web.Application()
+    caldav_app.router.add_route("PROPFIND", "/dav/", handle_propfind)
+
+    async with TestServer(discovery_app) as discovery_server:
+        discovery_url = str(discovery_server.make_url(""))
+
+        async with TestServer(caldav_app) as caldav_server:
+            caldav_url = str(caldav_server.make_url("/dav/"))
+            caldav_host = caldav_server.host
+
+            with patch.dict(KNOWN_OAUTH_ISSUERS, {caldav_host: discovery_url}):
+                negotiator = AuthNegotiator()
+                methods = await negotiator.probe(caldav_url)
+
+    assert len(methods) == 1
+    assert methods[0].scheme == "oauth"
+    assert methods[0].oauth_config is not None
+    assert methods[0].oauth_config.auth_uri == "https://auth.example.com/authorize"
