@@ -144,3 +144,41 @@ class LocalStore(Protocol):
 Built-in implementations will include:
 - `MemoryStore`: Fast in-memory cache for transient applications and testing.
 - `SQLiteStore`: Embedded persistent storage for desktop apps, CLI tools, and Home Assistant integrations.
+
+---
+
+## 6. Development & Testing Principles
+
+To ensure high reliability, fast local development iterations, and strict compliance, the project strictly adheres to six core testing and implementation principles:
+
+### 1. In-Process Loopback Testing (ASGI Client + Server)
+Unit tests for `CalDavClient` and `CalDavSyncManager` must use `httpx.ASGITransport` wired directly to `CalDavRouter`:
+```python
+# In-process loopback testing with zero network I/O
+transport = httpx.ASGITransport(app=caldav_router_app)
+async with CalDavClient(transport=transport, base_url="http://test") as client:
+    ...
+```
+This enables executing hundreds of client-server synchronization tests in milliseconds without network overhead or Docker setup.
+
+### 2. Multi-Server Docker Integration Matrix
+CI integration testing runs against real-world CalDAV containers:
+- **SabreDAV / Nextcloud:** Validates WebDAV Collection Synchronization (RFC 6578).
+- **Radicale:** Validates ETag fallback diffing on a simple flat-file server.
+- **Baïkal:** Validates multi-calendar discovery and standard WebDAV operations.
+
+### 3. XML Snapshot Testing (`syrupy`)
+WebDAV request payloads (`calendar-query`, `sync-collection`, `calendar-multiget`) and Multi-Status XML responses are tested against snapshot fixtures using `syrupy`. This guarantees structural XML correctness and prevents regressions.
+
+### 4. Robust XML Namespace Isolation
+All XML parsing must be namespace-agnostic, stripping prefix assumptions (`d:`, `C:`, `ns0:`, `DAV:`):
+```python
+# Match element tags by qualified name URI, not prefix strings
+element.find("{DAV:}href")
+```
+
+### 5. Immutability of Raw `.ics` Bytes
+The synchronization engine treats `.ics` calendar objects as raw, immutable text during transport. Re-encoding or formatting `.ics` payloads during sync is prohibited to prevent byte-checksum drift and false positive ETag mismatches.
+
+### 6. Explicit RFC Spec Tracing
+Every XML generator, parser module, and test case must link directly to its governing RFC section in its docstrings (e.g., `# RFC 6578 Section 3.2: The DAV:sync-collection REPORT`).
