@@ -52,7 +52,7 @@ class CalDavRouter:
         Returns:
             Configured aiohttp.web.Application ready to serve requests or be tested.
         """
-        app = web.Application()
+        app = web.Application(client_max_size=2 * 1024 * 1024)  # 2MB limit
 
         # Collection & Resource Routes
         app.router.add_route("OPTIONS", "/{tail:.*}", self.handle_options)

@@ -50,6 +50,7 @@ RFC References:
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 import sys
 from typing import Sequence
@@ -263,10 +264,10 @@ async def run_client_async(args: argparse.Namespace) -> int:
         print("Error: Missing client action. Use --help for usage.", file=sys.stderr)
         return 1
 
-    # Resolve credentials from CLI flags or AuthStore fallback
-    username = getattr(args, "username", None)
-    password = getattr(args, "password", None)
-    token = getattr(args, "token", None)
+    # Resolve credentials: CLI flags > env vars > AuthStore fallback
+    username = getattr(args, "username", None) or os.environ.get("ICALDAV_USERNAME")
+    password = getattr(args, "password", None) or os.environ.get("ICALDAV_PASSWORD")
+    token = getattr(args, "token", None) or os.environ.get("ICALDAV_TOKEN")
 
     if not (token or (username and password)):
         auth_store = AuthStore()

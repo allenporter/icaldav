@@ -11,10 +11,13 @@ RFC References:
 import asyncio
 from dataclasses import dataclass
 import json
+import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 from mashumaro.mixins.json import DataClassJSONMixin
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_AUTH_PATH = Path.home() / ".config" / "icaldav" / "auth.json"
 
@@ -69,7 +72,8 @@ class AuthStore:
             for host, data in raw_data.items():
                 profiles[host] = AuthProfile.from_dict(data)
             return profiles
-        except Exception:
+        except (json.JSONDecodeError, KeyError, TypeError) as err:
+            _LOGGER.warning("Failed to parse auth config %s: %s", self.config_path, err)
             return {}
 
     async def load_profiles(self) -> dict[str, AuthProfile]:

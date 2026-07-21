@@ -9,6 +9,8 @@ RFC References:
   - RFC 7235 Section 4.1: WWW-Authenticate Header Field.
 """
 
+import warnings
+
 import aiohttp
 
 from icaldav.client.exceptions import CalDavAuthError
@@ -69,6 +71,15 @@ class CalDavClient:
             self._owned_session = True
         return self._session
 
+    def _warn_insecure_auth(self, url: str) -> None:
+        """Emit a warning if credentials are being sent over non-HTTPS."""
+        if (self.auth or self.token) and not url.startswith("https://"):
+            warnings.warn(
+                f"Sending credentials over insecure HTTP connection to {url}. "
+                "Use HTTPS to protect credentials in transit.",
+                stacklevel=3,
+            )
+
     def _check_response(self, resp: aiohttp.ClientResponse) -> None:
         """Inspect HTTP response status and raise CalDavAuthError on 401/403 with WWW-Authenticate.
 
@@ -124,6 +135,7 @@ class CalDavClient:
             aiohttp.ClientResponseError: If the server returns another non-207 status code.
         """
         session = await self._get_session()
+        self._warn_insecure_auth(url)
         body = build_propfind_xml(props or ["resourcetype", "getetag", "displayname"])
         headers = {
             "Depth": str(depth),
@@ -152,6 +164,7 @@ class CalDavClient:
             aiohttp.ClientResponseError: If the HTTP response status is not 200 OK.
         """
         session = await self._get_session()
+        self._warn_insecure_auth(url)
         headers = {"Accept": "text/calendar, text/plain, */*"}
 
         async with session.get(url, headers=headers) as resp:
@@ -181,6 +194,7 @@ class CalDavClient:
             aiohttp.ClientResponseError: If the server rejects the request.
         """
         session = await self._get_session()
+        self._warn_insecure_auth(url)
         headers = {"Content-Type": "text/calendar; charset=utf-8"}
         if etag:
             headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
@@ -207,6 +221,7 @@ class CalDavClient:
             aiohttp.ClientResponseError: If the deletion fails.
         """
         session = await self._get_session()
+        self._warn_insecure_auth(url)
         headers = {}
         if etag:
             headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
