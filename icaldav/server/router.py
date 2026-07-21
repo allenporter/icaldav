@@ -56,9 +56,13 @@ class CalDavRouter:
 
         # Collection & Resource Routes
         app.router.add_route("OPTIONS", "/{tail:.*}", self.handle_options)
-        app.router.add_route("PROPFIND", "/{collection_id}", self.handle_propfind)
         app.router.add_route(
-            "PROPFIND", "/{collection_id}/{resource_id}", self.handle_propfind
+            "PROPFIND", "/{collection_id}", self.handle_propfind_collection
+        )
+        app.router.add_route(
+            "PROPFIND",
+            "/{collection_id}/{resource_id}",
+            self.handle_propfind_resource,
         )
         app.router.add_route("GET", "/{collection_id}/{resource_id}", self.handle_get)
         app.router.add_route("PUT", "/{collection_id}/{resource_id}", self.handle_put)
@@ -88,13 +92,10 @@ class CalDavRouter:
         return web.Response(status=200, headers=headers)
 
     @path_args
-    async def handle_propfind(
-        self,
-        request: web.Request,
-        collection_id: str = "",
-        resource_id: str | None = None,
+    async def handle_propfind_collection(
+        self, request: web.Request, collection_id: str
     ) -> web.Response:
-        """Handle PROPFIND request for collection listing or single resource stat.
+        """Handle PROPFIND request for a calendar collection listing.
 
         RFC Reference:
             - RFC 4918 Section 9.1: PROPFIND Method.
@@ -103,7 +104,6 @@ class CalDavRouter:
         Args:
             request: The incoming HTTP request.
             collection_id: Target collection identifier string.
-            resource_id: Optional target resource filename string.
 
         Returns:
             HTTP 207 Multi-Status XML response.
@@ -115,25 +115,50 @@ class CalDavRouter:
             attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
         )
 
-        # Query storage
-        if resource_id:
-            href = f"/{collection_id}/{resource_id}"
-            resource = await self.store.get_resource(collection_id, href)
-            if resource:
-                self._append_response_node(
-                    root, href, is_collection=False, etag=resource.etag
-                )
-        else:
-            # Collection PROPFIND
-            coll_href = f"/{collection_id}/"
-            self._append_response_node(root, coll_href, is_collection=True)
+        coll_href = f"/{collection_id}/"
+        self._append_response_node(root, coll_href, is_collection=True)
 
-            if depth != "0":
-                etags = await self.store.get_etags(collection_id)
-                for href, etag in etags.items():
-                    self._append_response_node(
-                        root, href, is_collection=False, etag=etag
-                    )
+        if depth != "0":
+            etags = await self.store.get_etags(collection_id)
+            for href, etag in etags.items():
+                self._append_response_node(root, href, is_collection=False, etag=etag)
+
+        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
+
+    @path_args
+    async def handle_propfind_resource(
+        self, request: web.Request, collection_id: str, resource_id: str
+    ) -> web.Response:
+        """Handle PROPFIND request for a single calendar object resource stat.
+
+        RFC Reference:
+            - RFC 4918 Section 9.1: PROPFIND Method.
+            - RFC 4918 Section 13: Multi-Status Response.
+
+        Args:
+            request: The incoming HTTP request.
+            collection_id: Target collection identifier string.
+            resource_id: Target resource filename string.
+
+        Returns:
+            HTTP 207 Multi-Status XML response or 404 Not Found if resource does not exist.
+        """
+        href = f"/{collection_id}/{resource_id}"
+        resource = await self.store.get_resource(collection_id, href)
+        if not resource:
+            return web.Response(status=404, text="Resource Not Found")
+
+        root = ET.Element(
+            qname(DAV, "multistatus"),
+            attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
+        )
+        self._append_response_node(root, href, is_collection=False, etag=resource.etag)
 
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         return web.Response(
