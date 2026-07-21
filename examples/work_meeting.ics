@@ -1,0 +1,13 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//icaldav//Example Calendar//EN
+BEGIN:VEVENT
+UID:work-meeting-2026-01@icaldav
+SUMMARY:Architecture & Design Sync
+DESCRIPTION:Weekly engineering sync to review design doc and roadmap.
+LOCATION:Conference Room A / Remote
+DTSTART:20260721T140000Z
+DTEND:20260721T150000Z
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

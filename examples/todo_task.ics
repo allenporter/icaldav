@@ -1,0 +1,12 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//icaldav//Example Calendar//EN
+BEGIN:VTODO
+UID:todo-task-100@icaldav
+SUMMARY:Review CalDAV PR #3
+DESCRIPTION:Verify test suite and linters before merging PR.
+DUE:20260721T170000Z
+STATUS:NEEDS-ACTION
+PRIORITY:1
+END:VTODO
+END:VCALENDAR
