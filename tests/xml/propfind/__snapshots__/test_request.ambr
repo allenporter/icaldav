@@ -1,0 +1,7 @@
+# serializer version: 1
+# name: test_build_propfind_xml
+  '''
+  <?xml version='1.0' encoding='utf-8'?>
+  <d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype /><d:getetag /><d:displayname /></d:prop></d:propfind>
+  '''
+# ---
