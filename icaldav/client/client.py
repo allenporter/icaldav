@@ -16,13 +16,15 @@ import warnings
 import aiohttp
 
 from icaldav.client.exceptions import CalDavAuthError
-from icaldav.xml.propfind import PropfindItem, build_propfind_xml, parse_multistatus_xml
-from icaldav.xml.report import (
-    ReportResource,
+from icaldav.xml.propfind.models import PropfindItem
+from icaldav.xml.propfind.request import build_propfind_xml
+from icaldav.xml.propfind.response import parse_multistatus_xml
+from icaldav.xml.report.models import ReportResource
+from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,
-    parse_report_response,
 )
+from icaldav.xml.report.response import parse_report_response
 
 
 class CalDavClient:
