@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-import pytest
 from aiohttp.test_utils import TestClient, TestServer
+import pytest
 
 from icaldav.cli import build_parser, main, main_async
 from icaldav.server.router import create_app
@@ -20,6 +20,7 @@ def test_cli_parser_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert "serve" in captured.out
     assert "client" in captured.out
     assert "store" in captured.out
+    assert "auth" in captured.out
 
 
 def test_cli_parser_subcommands() -> None:
@@ -31,18 +32,77 @@ def test_cli_parser_subcommands() -> None:
     assert args.command == "serve"
     assert args.port == 9090
 
-    # client propfind
+    # client propfind with auth flags
     args = parser.parse_args(
-        ["client", "propfind", "http://localhost/work", "--depth", "0"]
+        [
+            "client",
+            "propfind",
+            "http://localhost/work",
+            "-u",
+            "user",
+            "-p",
+            "pass",
+            "--depth",
+            "0",
+        ]
     )
     assert args.command == "client"
     assert args.client_action == "propfind"
+    assert args.username == "user"
+    assert args.password == "pass"
     assert args.depth == 0
+
+    # auth login
+    args = parser.parse_args(["auth", "login", "-u", "user", "-p", "pass"])
+    assert args.command == "auth"
+    assert args.auth_action == "login"
 
     # store inspect
     args = parser.parse_args(["store", "inspect"])
     assert args.command == "store"
     assert args.store_action == "inspect"
+
+
+@pytest.mark.asyncio
+async def test_cli_auth_subcommands(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test icaldav auth login, status, and logout subcommands."""
+    config_file = tmp_path / "auth.json"
+    monkeypatch.setattr(
+        "icaldav.client.auth.AuthStore.__init__",
+        lambda self, config_path=config_file: setattr(self, "config_path", config_path),
+    )
+
+    # 1. login
+    code = await main_async(
+        [
+            "auth",
+            "login",
+            "--url",
+            "https://caldav.example.com",
+            "-u",
+            "alice",
+            "-p",
+            "secret",
+        ]
+    )
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Saved credentials profile" in captured.out
+
+    # 2. status
+    code = await main_async(["auth", "status"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Saved Authentication Profiles" in captured.out
+    assert "alice" in captured.out
+
+    # 3. logout
+    code = await main_async(["auth", "logout"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Successfully cleared" in captured.out
 
 
 @pytest.mark.asyncio
