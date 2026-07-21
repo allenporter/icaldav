@@ -22,7 +22,7 @@ Rather than relying on distant servers to perform complex date filtering or recu
 | :--- | :--- | :--- | :--- |
 | **Async Native (`asyncio`)** | ✅ First-class (`httpx`) | ⚠️ Partial wrapper module | ❌ Sync only |
 | **Data Engine** | ✅ `ical` (Pydantic v2) | ❌ `icalendar` / `vobject` | ❌ None (raw XML/strings) |
-| **Recurrence Handling** | ✅ Local & exact (`Timeline`) | ❌ Server-dependent | ❌ None |
+| **Recurrence Handling** | ✅ Local & exact (`Timeline`) | ⚠️ Relies on client (`icalendar`) | ❌ None |
 | **Incremental Sync** | ✅ RFC 6578 + ETag Fallback | ⚠️ Experimental | ❌ Manual |
 | **Embeddable Server** | ✅ ASGI Router included | ❌ Client only | ❌ Client only |
 | **Type Safety** | ✅ Strict `py.typed` | ⚠️ In progress | ❌ None |
