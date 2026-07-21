@@ -31,17 +31,40 @@ class AuthProfile(DataClassJSONMixin):
         username: Optional HTTP Basic Auth username string.
         password: Optional HTTP Basic Auth password string.
         token: Optional Bearer authentication token string.
+        client_id: Optional OAuth 2.0 client identifier string.
+        client_secret: Optional OAuth 2.0 client secret string.
+        refresh_token: Optional OAuth 2.0 refresh token string.
+        token_uri: Optional OAuth 2.0 token endpoint URI string.
+        token_expires_at: Optional Unix timestamp when the access token expires.
     """
 
     server_url: str
     username: str | None = None
     password: str | None = None
     token: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    refresh_token: str | None = None
+    token_uri: str | None = None
+    token_expires_at: float | None = None
 
     @property
     def auth_type(self) -> str:
-        """Dynamically computed authentication scheme type ('bearer' or 'basic')."""
-        return "bearer" if self.token else "basic"
+        """Dynamically computed authentication scheme type ('oauth', 'bearer', or 'basic')."""
+        if self.refresh_token:
+            return "oauth"
+        if self.token:
+            return "bearer"
+        return "basic"
+
+    @property
+    def is_token_expired(self) -> bool:
+        """Check if the stored OAuth access token has expired (with 5-minute safety margin)."""
+        if self.token_expires_at is None:
+            return True
+        import time
+
+        return time.time() >= self.token_expires_at - 300
 
 
 class AuthStore:

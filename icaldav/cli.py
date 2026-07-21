@@ -56,9 +56,13 @@ import sys
 from typing import Sequence
 from aiohttp import web
 
+import webbrowser
+
 from icaldav.client.auth import AuthProfile, AuthStore
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavAuthError
+from icaldav.client.negotiator import AuthNegotiator
+from icaldav.client.oauth import OAuthConfig, OAuthSession
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
 
@@ -93,6 +97,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     auth_subparsers.add_parser("status", help="Display saved authentication profiles")
     auth_subparsers.add_parser("logout", help="Clear all stored credentials")
+
+    probe_parser = auth_subparsers.add_parser(
+        "probe",
+        help="Probe a CalDAV server URL and discover supported authentication methods",
+    )
+    probe_parser.add_argument("url", help="CalDAV server URL to probe")
+
+    oauth_parser = auth_subparsers.add_parser(
+        "oauth", help="Authenticate with a CalDAV server using OAuth 2.0 browser flow"
+    )
+    oauth_parser.add_argument("url", help="CalDAV server URL to authenticate against")
+    oauth_parser.add_argument("--client-id", required=True, help="OAuth 2.0 client ID")
+    oauth_parser.add_argument(
+        "--client-secret", required=True, help="OAuth 2.0 client secret"
+    )
+    oauth_parser.add_argument(
+        "--port", type=int, default=8088, help="Local callback port (default: 8088)"
+    )
 
     # 2. serve
     serve_parser = subparsers.add_parser(
@@ -238,6 +260,130 @@ async def run_auth_async(args: argparse.Namespace) -> int:
             print("Successfully cleared all stored credentials.")
         else:
             print("No stored credentials found to clear.")
+    elif action == "probe":
+        negotiator = AuthNegotiator()
+        print(f"Probing {args.url} ...")
+        try:
+            methods = await negotiator.probe(args.url)
+            print(f"Discovered {len(methods)} authentication method(s):")
+            for method in methods:
+                if method.oauth_config:
+                    print(f"  - {method.scheme} (realm: {method.realm or 'N/A'})")
+                    print(f"    Auth URI:  {method.oauth_config.auth_uri}")
+                    print(f"    Token URI: {method.oauth_config.token_uri}")
+                else:
+                    print(f"  - {method.scheme} (realm: {method.realm or 'N/A'})")
+        except Exception as err:
+            print(f"Error probing {args.url}: {err}", file=sys.stderr)
+            return 1
+    elif action == "oauth":
+        # 1. Probe to discover OAuth config
+        negotiator = AuthNegotiator()
+        print(f"Probing {args.url} for OAuth endpoints...")
+        try:
+            methods = await negotiator.probe(args.url)
+        except Exception as err:
+            print(f"Error probing {args.url}: {err}", file=sys.stderr)
+            return 1
+
+        # Find an OAuth method
+        oauth_method = next(
+            (m for m in methods if m.scheme == "oauth" and m.oauth_config), None
+        )
+        if not oauth_method or not oauth_method.oauth_config:
+            print(
+                "Error: No OAuth endpoint discovered for this server.", file=sys.stderr
+            )
+            print(
+                "Discovered methods: " + ", ".join(m.scheme for m in methods),
+                file=sys.stderr,
+            )
+            return 1
+
+        # 2. Configure OAuth with discovered endpoints + user's credentials
+        config = OAuthConfig(
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            auth_uri=oauth_method.oauth_config.auth_uri,
+            token_uri=oauth_method.oauth_config.token_uri,
+            redirect_uri=f"http://localhost:{args.port}",
+            scopes=oauth_method.oauth_config.scopes
+            or ["https://www.googleapis.com/auth/calendar"],
+        )
+
+        # 3. Build auth URL with PKCE
+        auth_url, code_verifier = OAuthSession.authorize_url(config)
+        print("\nOpening browser for authorization...")
+        print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
+        webbrowser.open(auth_url)
+
+        # 4. Start temporary callback server to receive the authorization code
+        code_future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
+
+        async def handle_callback(request: web.Request) -> web.Response:
+            code = request.query.get("code")
+            error = request.query.get("error")
+            if error:
+                code_future.set_exception(Exception(f"OAuth error: {error}"))
+                return web.Response(
+                    text="Authorization failed. You can close this tab.",
+                    content_type="text/plain",
+                )
+            if code:
+                code_future.set_result(code)
+                return web.Response(
+                    text="Authorization successful! You can close this tab.",
+                    content_type="text/plain",
+                )
+            return web.Response(
+                text="Missing authorization code.",
+                status=400,
+                content_type="text/plain",
+            )
+
+        callback_app = web.Application()
+        callback_app.router.add_get("/", handle_callback)
+
+        runner = web.AppRunner(callback_app)
+        await runner.setup()
+        site = web.TCPSite(runner, "localhost", args.port)
+        await site.start()
+        print(f"Waiting for OAuth callback on http://localhost:{args.port} ...")
+
+        try:
+            code = await asyncio.wait_for(code_future, timeout=300)
+        except asyncio.TimeoutError:
+            print("Error: OAuth callback timed out after 5 minutes.", file=sys.stderr)
+            await runner.cleanup()
+            return 1
+        finally:
+            await runner.cleanup()
+
+        # 5. Exchange code for tokens
+        print("Exchanging authorization code for tokens...")
+        try:
+            token = await OAuthSession.exchange_code(config, code, code_verifier)
+        except Exception as err:
+            print(f"Error exchanging code: {err}", file=sys.stderr)
+            return 1
+
+        # 6. Save to auth store
+        profile = AuthProfile(
+            server_url=args.url,
+            token=token.access_token,
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            refresh_token=token.refresh_token,
+            token_uri=config.token_uri,
+            token_expires_at=token.expires_at,
+        )
+        auth_store = AuthStore()
+        await auth_store.save_profile(profile)
+        print(
+            f"\nSuccessfully authenticated! OAuth credentials saved for '{args.url}'."
+        )
+        if token.refresh_token:
+            print("Refresh token stored \u2014 access token will auto-refresh.")
     else:
         print("Error: Missing auth action. Use --help for usage.", file=sys.stderr)
         return 1
