@@ -29,10 +29,13 @@ RFC References:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import xml.etree.ElementTree as ET
 
 from icaldav.filter import CompFilter, TimeRange
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +461,7 @@ def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError:
+        _LOGGER.debug("Failed to parse REPORT response XML", exc_info=True)
         return []
 
     resources: list[ReportResource] = []

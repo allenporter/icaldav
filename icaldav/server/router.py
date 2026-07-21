@@ -10,19 +10,22 @@ RFC References:
 
 from functools import wraps
 import hashlib
+import logging
 from typing import Any, Callable, Coroutine
 import xml.etree.ElementTree as ET
 from aiohttp import web
 
+from icaldav.filter import matches_comp_filter
 from icaldav.store.types import CalendarResource, LocalStore
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
-from icaldav.filter import matches_comp_filter
 from icaldav.xml.report import (
     ReportResource,
     build_report_response,
     parse_calendar_multiget,
     parse_calendar_query,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def path_args(
@@ -384,6 +387,7 @@ class CalDavRouter:
         try:
             root = ET.fromstring(body_bytes)
         except ET.ParseError:
+            _LOGGER.debug("Failed to parse REPORT XML body", exc_info=True)
             return web.Response(status=400, text="Invalid XML")
 
         root_tag = strip_ns(root.tag)
