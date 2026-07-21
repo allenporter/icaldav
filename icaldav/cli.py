@@ -408,18 +408,20 @@ async def run_client_async(args: argparse.Namespace) -> int:
     password = getattr(args, "password", None) or os.environ.get("ICALDAV_PASSWORD")
     token = getattr(args, "token", None) or os.environ.get("ICALDAV_TOKEN")
 
-    if not (token or (username and password)):
+    auth_profile: AuthProfile | None = None
+    if token or (username and password):
+        auth_profile = AuthProfile(
+            server_url=args.url,
+            username=username,
+            password=password,
+            token=token,
+        )
+    else:
         auth_store = AuthStore()
-        saved_profile = await auth_store.get_profile(args.url)
-        if saved_profile:
-            username = username or saved_profile.username
-            password = password or saved_profile.password
-            token = token or saved_profile.token
+        auth_profile = await auth_store.get_profile(args.url)
 
     try:
-        async with CalDavClient(
-            username=username, password=password, token=token
-        ) as client:
+        async with CalDavClient(auth_profile=auth_profile) as client:
             if action == "propfind":
                 items = await client.propfind(args.url, depth=args.depth)
                 print(f"PROPFIND Response for {args.url} (Depth: {args.depth}):")

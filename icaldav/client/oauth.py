@@ -24,7 +24,7 @@ import aiohttp
 from mashumaro.mixins.json import DataClassJSONMixin
 
 if TYPE_CHECKING:
-    from icaldav.client.auth import AuthProfile
+    pass
 
 
 @dataclass
@@ -363,44 +363,3 @@ class OAuthSession:
             return await asyncio.wait_for(code_future, timeout=timeout)
         finally:
             await runner.cleanup()
-
-
-class OAuthTokenManager:
-    """Manages access token validation and auto-refresh for an AuthProfile.
-
-    RFC References:
-        - RFC 6749 Section 6: Refreshing an Access Token.
-    """
-
-    def __init__(self, profile: AuthProfile) -> None:
-        """Initialize with target AuthProfile.
-
-        Args:
-            profile: Credentials profile instance.
-        """
-        self.profile = profile
-
-    async def ensure_fresh_token(self) -> str | None:
-        """Check token expiration and refresh if expired, updating the AuthProfile.
-
-        Returns:
-            The valid (potentially refreshed) access token string, or None.
-        """
-        if self.profile.auth_type != "oauth":
-            return self.profile.token
-
-        if self.profile.token and not self.profile.is_token_expired:
-            return self.profile.token
-
-        config = OAuthConfig(
-            client_id=self.profile.client_id or "",
-            client_secret=self.profile.client_secret or "",
-            auth_uri="",
-            token_uri=self.profile.token_uri or "",
-        )
-        fresh_token = await OAuthSession.refresh(
-            config, self.profile.refresh_token or ""
-        )
-        self.profile.token = fresh_token.access_token
-        self.profile.token_expires_at = fresh_token.expires_at
-        return fresh_token.access_token

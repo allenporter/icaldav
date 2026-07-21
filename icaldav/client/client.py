@@ -17,7 +17,6 @@ import aiohttp
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.exceptions import CalDavAuthError
-from icaldav.client.oauth import OAuthTokenManager
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
 from icaldav.xml.propfind.response import parse_multistatus_xml
@@ -27,27 +26,6 @@ from icaldav.xml.report.request import (
     build_calendar_query_xml,
 )
 from icaldav.xml.report.response import parse_report_response
-
-
-def _resolve_credentials(
-    username: str | None,
-    password: str | None,
-    token: str | None,
-    auth: aiohttp.BasicAuth | None,
-    auth_profile: AuthProfile | None,
-) -> tuple[aiohttp.BasicAuth | None, str | None]:
-    """Resolve basic auth object and bearer token from parameters or AuthProfile."""
-    if auth or username or token:
-        resolved_auth = auth or (
-            aiohttp.BasicAuth(username, password) if username and password else None
-        )
-        return resolved_auth, token
-    if auth_profile:
-        if auth_profile.auth_type == "basic":
-            return auth_profile.basic_auth, None
-        if auth_profile.auth_type in ("oauth", "bearer"):
-            return None, auth_profile.token
-    return None, None
 
 
 class CalDavClient:
@@ -63,69 +41,48 @@ class CalDavClient:
     def __init__(
         self,
         session: aiohttp.ClientSession | None = None,
-        username: str | None = None,
-        password: str | None = None,
-        token: str | None = None,
-        auth: aiohttp.BasicAuth | None = None,
         auth_profile: AuthProfile | None = None,
     ) -> None:
-        """Initialize CalDavClient with optional session and credentials.
-
-        Credentials can be provided either via explicit username/password/token
-        parameters or via an AuthProfile with automatic OAuth token refresh support.
+        """Initialize CalDavClient with optional session and auth profile.
 
         Args:
             session: Optional existing aiohttp.ClientSession. If None, an internal session is created.
-            username: Optional HTTP Basic Auth username string.
-            password: Optional HTTP Basic Auth password string.
-            token: Optional Bearer authentication token string.
-            auth: Optional pre-configured aiohttp.BasicAuth object.
-            auth_profile: Optional AuthProfile for credential management with
-                OAuth auto-refresh support (RFC 6749 Section 6).
+            auth_profile: Optional AuthProfile managing credentials and OAuth auto-refresh.
         """
         self._session = session
         self._owned_session = session is None
-        self._auth_profile = auth_profile
-        self.username = username or (auth_profile.username if auth_profile else None)
-        self.password = password or (auth_profile.password if auth_profile else None)
-        self.auth, self.token = _resolve_credentials(
-            username, password, token, auth, auth_profile
-        )
+        self.auth_profile = auth_profile
+        self._active_token: str | None = auth_profile.token if auth_profile else None
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        """Retrieve active ClientSession, instantiating one with configured auth if needed.
-
-        Ensures OAuth tokens are refreshed before creating or reusing sessions.
-        """
-        if self._auth_profile:
-            fresh_token = await OAuthTokenManager(
-                self._auth_profile
-            ).ensure_fresh_token()
-            if fresh_token and fresh_token != self.token:
-                self.token = fresh_token
+        """Retrieve active ClientSession, obtaining configured session kwargs from auth_profile."""
+        if self.auth_profile and self.auth_profile.auth_type == "oauth":
+            fresh_token = await self.auth_profile.ensure_fresh_token()
+            if fresh_token and fresh_token != self._active_token:
+                self._active_token = fresh_token
                 if self._session is not None and not self._session.closed:
                     await self._session.close()
                 self._session = None
-        if self._session is None or self._session.closed:
-            headers: dict[str, str] = {}
-            if self.token:
-                headers["Authorization"] = f"Bearer {self.token}"
 
-            self._session = aiohttp.ClientSession(
-                auth=self.auth,
-                headers=headers if headers else None,
+        if self._session is None or self._session.closed:
+            kwargs = (
+                await self.auth_profile.get_session_kwargs()
+                if self.auth_profile
+                else {}
             )
+            self._session = aiohttp.ClientSession(**kwargs)
             self._owned_session = True
         return self._session
 
     def _warn_insecure_auth(self, url: str) -> None:
         """Emit a warning if credentials are being sent over non-HTTPS."""
-        if (self.auth or self.token) and not url.startswith("https://"):
-            warnings.warn(
-                f"Sending credentials over insecure HTTP connection to {url}. "
-                "Use HTTPS to protect credentials in transit.",
-                stacklevel=3,
-            )
+        if self.auth_profile and not url.startswith("https://"):
+            if self.auth_profile.basic_auth or self.auth_profile.token:
+                warnings.warn(
+                    f"Sending credentials over insecure HTTP connection to {url}. "
+                    "Use HTTPS to protect credentials in transit.",
+                    stacklevel=3,
+                )
 
     def _check_response(self, resp: aiohttp.ClientResponse) -> None:
         """Inspect HTTP response status and raise CalDavAuthError on 401/403 with WWW-Authenticate.

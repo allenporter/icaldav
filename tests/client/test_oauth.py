@@ -220,10 +220,9 @@ async def test_discover_oauth_config() -> None:
     assert config.scopes == ["openid", "calendar"]
 
 
-async def test_oauth_token_manager() -> None:
-    """Test OAuthTokenManager auto-refreshes expired token and updates AuthProfile."""
+async def test_auth_profile_auto_refresh() -> None:
+    """Test AuthProfile.ensure_fresh_token() auto-refreshes expired OAuth token."""
     from icaldav.client.auth import AuthProfile
-    from icaldav.client.oauth import OAuthTokenManager
 
     async def handle_refresh(request: web.Request) -> web.Response:
         return web.json_response(
@@ -247,8 +246,7 @@ async def test_oauth_token_manager() -> None:
             token_expires_at=0.0,  # expired
         )
 
-        manager = OAuthTokenManager(profile)
-        fresh_token = await manager.ensure_fresh_token()
+        fresh_token = await profile.ensure_fresh_token()
 
     assert fresh_token == "new-access-token"
     assert profile.token == "new-access-token"

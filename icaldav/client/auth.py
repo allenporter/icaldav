@@ -15,6 +15,7 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from typing import Any
 import aiohttp
 from mashumaro.mixins.json import DataClassJSONMixin
 
@@ -39,7 +40,7 @@ class AuthProfile(DataClassJSONMixin):
         token_expires_at: Optional Unix timestamp when the access token expires.
     """
 
-    server_url: str
+    server_url: str = ""
     username: str | None = None
     password: str | None = None
     token: str | None = None
@@ -73,6 +74,39 @@ class AuthProfile(DataClassJSONMixin):
         if self.username and self.password:
             return aiohttp.BasicAuth(self.username, self.password)
         return None
+
+    async def ensure_fresh_token(self) -> str | None:
+        """Auto-refresh OAuth access token if expired (RFC 6749 Section 6)."""
+        if self.auth_type != "oauth":
+            return self.token
+        if self.token and not self.is_token_expired:
+            return self.token
+
+        from icaldav.client.oauth import OAuthConfig, OAuthSession
+
+        config = OAuthConfig(
+            client_id=self.client_id or "",
+            client_secret=self.client_secret or "",
+            auth_uri="",
+            token_uri=self.token_uri or "",
+        )
+        fresh_token = await OAuthSession.refresh(config, self.refresh_token or "")
+        self.token = fresh_token.access_token
+        self.token_expires_at = fresh_token.expires_at
+        return self.token
+
+    async def get_session_kwargs(self) -> dict[str, Any]:
+        """Returns kwargs dictionary (auth, headers) for initializing an aiohttp.ClientSession."""
+        if self.auth_type == "basic":
+            if self.basic_auth:
+                return {"auth": self.basic_auth}
+            return {}
+
+        token = await self.ensure_fresh_token()
+        if token:
+            return {"headers": {"Authorization": f"Bearer {token}"}}
+
+        return {}
 
 
 class AuthStore:
