@@ -59,12 +59,8 @@ class AuthStore:
         if self.config_path.exists():
             os.chmod(self.config_path, 0o600)
 
-    def load_profiles(self) -> dict[str, AuthProfile]:
-        """Synchronously load all credential profiles from auth.json using mashumaro.
-
-        Returns:
-            Dictionary mapping profile host keys to AuthProfile objects.
-        """
+    def _load_profiles_sync(self) -> dict[str, AuthProfile]:
+        """Private synchronous method to load all credential profiles from auth.json."""
         if not self.config_path.exists():
             return {}
         try:
@@ -76,21 +72,14 @@ class AuthStore:
         except Exception:
             return {}
 
-    async def async_load_profiles(self) -> dict[str, AuthProfile]:
+    async def load_profiles(self) -> dict[str, AuthProfile]:
         """Asynchronously load all credential profiles off the main event loop thread."""
-        return await asyncio.to_thread(self.load_profiles)
+        return await asyncio.to_thread(self._load_profiles_sync)
 
-    def save_profile(self, profile: AuthProfile) -> AuthProfile:
-        """Synchronously save an AuthProfile for a host or URL to auth.json using mashumaro.
-
-        Args:
-            profile: Target AuthProfile instance to persist.
-
-        Returns:
-            The persisted AuthProfile instance.
-        """
+    def _save_profile_sync(self, profile: AuthProfile) -> AuthProfile:
+        """Private synchronous method to save an AuthProfile to auth.json."""
         self._ensure_dir_and_permissions()
-        profiles = self.load_profiles()
+        profiles = self._load_profiles_sync()
 
         parsed = urlparse(profile.server_url)
         host_key = (
@@ -107,20 +96,13 @@ class AuthStore:
         os.chmod(self.config_path, 0o600)
         return profile
 
-    async def async_save_profile(self, profile: AuthProfile) -> AuthProfile:
+    async def save_profile(self, profile: AuthProfile) -> AuthProfile:
         """Asynchronously save an AuthProfile off the main event loop thread."""
-        return await asyncio.to_thread(self.save_profile, profile)
+        return await asyncio.to_thread(self._save_profile_sync, profile)
 
-    def get_profile(self, url: str | None = None) -> AuthProfile | None:
-        """Synchronously retrieve stored AuthProfile matching a target URL or host.
-
-        Args:
-            url: Target URL to match or None to fetch default profile.
-
-        Returns:
-            Matching AuthProfile or None if no matching profile is found.
-        """
-        profiles = self.load_profiles()
+    def _get_profile_sync(self, url: str | None = None) -> AuthProfile | None:
+        """Private synchronous method to retrieve stored AuthProfile matching a URL."""
+        profiles = self._load_profiles_sync()
         if not profiles:
             return None
 
@@ -132,21 +114,17 @@ class AuthStore:
 
         return profiles.get("default")
 
-    async def async_get_profile(self, url: str | None = None) -> AuthProfile | None:
+    async def get_profile(self, url: str | None = None) -> AuthProfile | None:
         """Asynchronously retrieve stored AuthProfile off the main event loop thread."""
-        return await asyncio.to_thread(self.get_profile, url)
+        return await asyncio.to_thread(self._get_profile_sync, url)
 
-    def clear_credentials(self) -> bool:
-        """Synchronously delete stored auth.json configuration file.
-
-        Returns:
-            True if file existed and was removed, False otherwise.
-        """
+    def _clear_credentials_sync(self) -> bool:
+        """Private synchronous method to delete stored auth.json configuration file."""
         if self.config_path.exists():
             self.config_path.unlink()
             return True
         return False
 
-    async def async_clear_credentials(self) -> bool:
+    async def clear_credentials(self) -> bool:
         """Asynchronously delete stored auth.json configuration file."""
-        return await asyncio.to_thread(self.clear_credentials)
+        return await asyncio.to_thread(self._clear_credentials_sync)

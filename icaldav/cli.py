@@ -170,8 +170,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_auth(args: argparse.Namespace) -> int:
-    """Execute auth CLI subcommands.
+async def run_auth_async(args: argparse.Namespace) -> int:
+    """Async handler executing auth CLI subcommands.
 
     Args:
         args: Parsed command-line arguments.
@@ -195,12 +195,12 @@ def run_auth(args: argparse.Namespace) -> int:
             password=args.password,
             token=args.token,
         )
-        saved = auth_store.save_profile(profile)
+        saved = await auth_store.save_profile(profile)
         print(
             f"Saved credentials profile for '{saved.server_url}' ({saved.auth_type} auth)."
         )
     elif action == "status":
-        profiles = auth_store.load_profiles()
+        profiles = await auth_store.load_profiles()
         if not profiles:
             print("No saved authentication profiles found.")
         else:
@@ -209,7 +209,7 @@ def run_auth(args: argparse.Namespace) -> int:
                 ident = p.username if p.username else "Bearer Token"
                 print(f"  - [{host}] {p.server_url} ({p.auth_type}: {ident})")
     elif action == "logout":
-        if auth_store.clear_credentials():
+        if await auth_store.clear_credentials():
             print("Successfully cleared all stored credentials.")
         else:
             print("No stored credentials found to clear.")
@@ -217,6 +217,18 @@ def run_auth(args: argparse.Namespace) -> int:
         print("Error: Missing auth action. Use --help for usage.", file=sys.stderr)
         return 1
     return 0
+
+
+def run_auth(args: argparse.Namespace) -> int:
+    """Execute auth CLI subcommands synchronously via asyncio.run().
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Exit code integer.
+    """
+    return asyncio.run(run_auth_async(args))
 
 
 def run_serve(args: argparse.Namespace) -> int:
@@ -258,7 +270,7 @@ async def run_client_async(args: argparse.Namespace) -> int:
 
     if not (token or (username and password)):
         auth_store = AuthStore()
-        saved_profile = await auth_store.async_get_profile(args.url)
+        saved_profile = await auth_store.get_profile(args.url)
         if saved_profile:
             username = username or saved_profile.username
             password = password or saved_profile.password
@@ -354,7 +366,7 @@ async def main_async(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "auth":
-        return run_auth(args)
+        return await run_auth_async(args)
     elif args.command == "serve":
         return run_serve(args)
     elif args.command == "client":
