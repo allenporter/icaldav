@@ -53,11 +53,9 @@ class AuthStore:
         """
         self.config_path = config_path or DEFAULT_AUTH_PATH
 
-    def _ensure_dir_and_permissions(self) -> None:
-        """Create parent directory if missing and set 0o600 owner-only permissions on file."""
+    def _ensure_dir(self) -> None:
+        """Create parent directory if missing."""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        if self.config_path.exists():
-            os.chmod(self.config_path, 0o600)
 
     def _load_profiles_sync(self) -> dict[str, AuthProfile]:
         """Private synchronous method to load all credential profiles from auth.json."""
@@ -78,7 +76,7 @@ class AuthStore:
 
     def _save_profile_sync(self, profile: AuthProfile) -> AuthProfile:
         """Private synchronous method to save an AuthProfile to auth.json."""
-        self._ensure_dir_and_permissions()
+        self._ensure_dir()
         profiles = self._load_profiles_sync()
 
         parsed = urlparse(profile.server_url)
@@ -92,8 +90,11 @@ class AuthStore:
         profiles["default"] = profile
 
         serialized = {k: v.to_dict() for k, v in profiles.items()}
-        self.config_path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
-        os.chmod(self.config_path, 0o600)
+        fd = os.open(
+            str(self.config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(serialized, f, indent=2)
         return profile
 
     async def save_profile(self, profile: AuthProfile) -> AuthProfile:
