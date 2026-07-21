@@ -6,11 +6,11 @@ import pytest
 from syrupy.assertion import SnapshotAssertion
 
 from icaldav.xml.namespaces import CALDAV, DAV, strip_ns
-from icaldav.xml.propfind import (
+from icaldav.xml.propfind.request import (
     build_propfind_xml,
-    parse_multistatus_xml,
     parse_propfind_request,
 )
+from icaldav.xml.propfind.response import parse_multistatus_xml
 
 
 # Billion Laughs (exponential entity expansion) attack payload.

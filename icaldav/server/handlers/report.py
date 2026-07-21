@@ -15,12 +15,12 @@ from aiohttp import web
 from icaldav.filter import matches_comp_filter
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import strip_ns
-from icaldav.xml.report import (
-    ReportResource,
-    build_report_response,
+from icaldav.xml.report.models import ReportResource
+from icaldav.xml.report.request import (
     parse_calendar_multiget,
     parse_calendar_query,
 )
+from icaldav.xml.report.response import build_report_response
 
 _LOGGER = logging.getLogger(__name__)
 

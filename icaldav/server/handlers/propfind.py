@@ -12,7 +12,8 @@ from aiohttp import web
 
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import DAV, qname
-from icaldav.xml.propfind import append_propfind_response, parse_propfind_request
+from icaldav.xml.propfind.request import parse_propfind_request
+from icaldav.xml.propfind.response import append_propfind_response
 
 
 def path_args(
