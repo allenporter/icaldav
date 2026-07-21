@@ -97,6 +97,12 @@ class CalDavRouter:
     ) -> web.Response:
         """Handle PROPFIND request for a calendar collection listing.
 
+        PROPFIND Purpose:
+            The PROPFIND method (RFC 4918 Section 9.1) acts like `ls` / `dir` + `stat`.
+            When issued against a collection path (e.g. `/work/`), it discovers collection properties
+            (verifying `DAV:resourcetype` contains `<collection/>` and `<calendar/>`) and, when
+            `Depth: 1` is specified, lists all child calendar items and their ETags (`DAV:getetag`).
+
         RFC Reference:
             - RFC 4918 Section 9.1: PROPFIND Method.
             - RFC 4918 Section 13: Multi-Status Response.
@@ -137,6 +143,11 @@ class CalDavRouter:
     ) -> web.Response:
         """Handle PROPFIND request for a single calendar object resource stat.
 
+        PROPFIND Purpose:
+            When issued against an individual file resource (e.g. `/work/event1.ics`), PROPFIND acts
+            like a `stat` query. It allows clients to query metadata—such as checking the version
+            ETag (`DAV:getetag`) or resource type—without downloading the full `.ics` payload.
+
         RFC Reference:
             - RFC 4918 Section 9.1: PROPFIND Method.
             - RFC 4918 Section 13: Multi-Status Response.
@@ -175,7 +186,21 @@ class CalDavRouter:
         is_collection: bool,
         etag: str | None = None,
     ) -> None:
-        """Append a <DAV:response> element to a <DAV:multistatus> root."""
+        """Append a <DAV:response> element to a <DAV:multistatus> root XML element.
+
+        Multi-Status Concept:
+            WebDAV uses HTTP 207 Multi-Status and an XML `<DAV:multistatus>` container because a single
+            request can query multiple resources or properties, each potentially returning a different
+            status code (e.g. HTTP 200 OK vs 404 Not Found). This helper appends a `<DAV:response>`
+            node containing the resource's `href` and a `<DAV:propstat>` element grouping its properties
+            under `HTTP/1.1 200 OK`.
+
+        Args:
+            root: Top-level `<DAV:multistatus>` ElementTree node.
+            href: Relative URI path of the resource or collection.
+            is_collection: True if this node represents a calendar collection folder.
+            etag: Optional entity tag string for file resources.
+        """
         resp = ET.SubElement(root, qname(DAV, "response"))
         href_elem = ET.SubElement(resp, qname(DAV, "href"))
         href_elem.text = href
