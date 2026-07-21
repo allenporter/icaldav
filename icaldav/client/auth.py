@@ -15,6 +15,7 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+import aiohttp
 from mashumaro.mixins.json import DataClassJSONMixin
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,6 +66,13 @@ class AuthProfile(DataClassJSONMixin):
         import time
 
         return time.time() >= self.token_expires_at - 300
+
+    @property
+    def basic_auth(self) -> aiohttp.BasicAuth | None:
+        """Create an aiohttp.BasicAuth object if username and password are provided."""
+        if self.username and self.password:
+            return aiohttp.BasicAuth(self.username, self.password)
+        return None
 
 
 class AuthStore:

@@ -218,3 +218,39 @@ async def test_discover_oauth_config() -> None:
     assert config.auth_uri == "https://auth.example.com/authorize"
     assert config.token_uri == "https://auth.example.com/token"
     assert config.scopes == ["openid", "calendar"]
+
+
+async def test_oauth_token_manager() -> None:
+    """Test OAuthTokenManager auto-refreshes expired token and updates AuthProfile."""
+    from icaldav.client.auth import AuthProfile
+    from icaldav.client.oauth import OAuthTokenManager
+
+    async def handle_refresh(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "access_token": "new-access-token",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            }
+        )
+
+    app = web.Application()
+    app.router.add_post("/token", handle_refresh)
+
+    async with TestServer(app) as server:
+        token_url = str(server.make_url("/token"))
+        profile = AuthProfile(
+            server_url="https://example.com",
+            token="old-expired-token",
+            refresh_token="my-refresh-token",
+            token_uri=token_url,
+            token_expires_at=0.0,  # expired
+        )
+
+        manager = OAuthTokenManager(profile)
+        fresh_token = await manager.ensure_fresh_token()
+
+    assert fresh_token == "new-access-token"
+    assert profile.token == "new-access-token"
+    assert profile.token_expires_at is not None
+    assert profile.token_expires_at > 0

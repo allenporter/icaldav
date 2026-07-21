@@ -17,7 +17,7 @@ import aiohttp
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.exceptions import CalDavAuthError
-from icaldav.client.oauth import OAuthConfig, OAuthSession
+from icaldav.client.oauth import OAuthTokenManager
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
 from icaldav.xml.propfind.response import parse_multistatus_xml
@@ -27,6 +27,27 @@ from icaldav.xml.report.request import (
     build_calendar_query_xml,
 )
 from icaldav.xml.report.response import parse_report_response
+
+
+def _resolve_credentials(
+    username: str | None,
+    password: str | None,
+    token: str | None,
+    auth: aiohttp.BasicAuth | None,
+    auth_profile: AuthProfile | None,
+) -> tuple[aiohttp.BasicAuth | None, str | None]:
+    """Resolve basic auth object and bearer token from parameters or AuthProfile."""
+    if auth or username or token:
+        resolved_auth = auth or (
+            aiohttp.BasicAuth(username, password) if username and password else None
+        )
+        return resolved_auth, token
+    if auth_profile:
+        if auth_profile.auth_type == "basic":
+            return auth_profile.basic_auth, None
+        if auth_profile.auth_type in ("oauth", "bearer"):
+            return None, auth_profile.token
+    return None, None
 
 
 class CalDavClient:
@@ -50,9 +71,8 @@ class CalDavClient:
     ) -> None:
         """Initialize CalDavClient with optional session and credentials.
 
-        Credentials can be provided either via the explicit username/password/token
-        parameters, or via an AuthProfile that also supports automatic OAuth token
-        refresh.
+        Credentials can be provided either via explicit username/password/token
+        parameters or via an AuthProfile with automatic OAuth token refresh support.
 
         Args:
             session: Optional existing aiohttp.ClientSession. If None, an internal session is created.
@@ -66,76 +86,26 @@ class CalDavClient:
         self._session = session
         self._owned_session = session is None
         self._auth_profile = auth_profile
-        self.username = username
-        self.password = password
-        self.token = token
-
-        # Apply credentials from auth_profile if no explicit credentials given
-        if auth_profile is not None and not auth and not username and not token:
-            if (
-                auth_profile.auth_type == "basic"
-                and auth_profile.username
-                and auth_profile.password
-            ):
-                self.username = auth_profile.username
-                self.password = auth_profile.password
-                self.auth = aiohttp.BasicAuth(
-                    auth_profile.username, auth_profile.password
-                )
-            elif auth_profile.auth_type in ("oauth", "bearer") and auth_profile.token:
-                self.token = auth_profile.token
-                self.auth = None
-            else:
-                self.auth = None
-        elif auth:
-            self.auth = auth
-        elif username and password:
-            self.auth = aiohttp.BasicAuth(username, password)
-        else:
-            self.auth = None
-
-    async def _ensure_fresh_token(self) -> None:
-        """Refresh the OAuth access token if it has expired.
-
-        Checks whether the current AuthProfile has an expired OAuth token and,
-        if so, uses the refresh token to obtain a fresh access token from the
-        token endpoint. The internal session is closed and reset so the next
-        call to ``_get_session`` creates a new session with the updated bearer
-        header.
-
-        RFC References:
-            - RFC 6749 Section 6: Refreshing an Access Token.
-        """
-        if self._auth_profile is None or self._auth_profile.auth_type != "oauth":
-            return
-        if self._auth_profile.token and not self._auth_profile.is_token_expired:
-            return
-
-        config = OAuthConfig(
-            client_id=self._auth_profile.client_id or "",
-            client_secret=self._auth_profile.client_secret or "",
-            auth_uri="",
-            token_uri=self._auth_profile.token_uri or "",
+        self.username = username or (auth_profile.username if auth_profile else None)
+        self.password = password or (auth_profile.password if auth_profile else None)
+        self.auth, self.token = _resolve_credentials(
+            username, password, token, auth, auth_profile
         )
-        fresh_token = await OAuthSession.refresh(
-            config, self._auth_profile.refresh_token or ""
-        )
-        self._auth_profile.token = fresh_token.access_token
-        self._auth_profile.token_expires_at = fresh_token.expires_at
-        self.token = fresh_token.access_token
-
-        # Close existing session so _get_session creates a new one with the
-        # updated bearer token header.
-        if self._session is not None and not self._session.closed:
-            await self._session.close()
-        self._session = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Retrieve active ClientSession, instantiating one with configured auth if needed.
 
         Ensures OAuth tokens are refreshed before creating or reusing sessions.
         """
-        await self._ensure_fresh_token()
+        if self._auth_profile:
+            fresh_token = await OAuthTokenManager(
+                self._auth_profile
+            ).ensure_fresh_token()
+            if fresh_token and fresh_token != self.token:
+                self.token = fresh_token
+                if self._session is not None and not self._session.closed:
+                    await self._session.close()
+                self._session = None
         if self._session is None or self._session.closed:
             headers: dict[str, str] = {}
             if self.token:
