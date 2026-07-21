@@ -1,0 +1,17 @@
+# icaldav
+
+> Modern, local-first CalDAV client engine and embeddable ASGI server for Python.
+
+## Overview
+
+`icaldav` is a modern Python implementation of CalDAV (RFC 4791), WebDAV Collection Synchronization (RFC 6578), and an embeddable ASGI server router. Powered by `ical` (Pydantic v2), `icaldav` takes a local-first synchronization approach to avoid server-side search bugs and complex XML queries.
+
+Key features and differentiators:
+- **Local-First Synchronization:** Downloads raw `.ics` streams to local storage and uses `ical`'s `Timeline` engine for local recurrence expansion and time-range slicing.
+- **Dual-Path Sync Engine:** High-performance RFC 6578 `sync-collection` delta sync with automatic ETag diff fallback for servers lacking RFC 6578 support (e.g. Radicale, Apple iCloud).
+- **Embeddable ASGI Server:** FastAPI/Starlette/`aiohttp` router to expose local calendars to native iOS, macOS, and Thunderbird clients.
+
+## Documentation Links
+
+- [Design Document](DESIGN.md): Detailed architectural document covering the sync engine, division of labor with `ical`, server quirks, and ASGI server scope boundaries.
+- [README](README.md): Project overview, installation instructions, and quickstart examples.

@@ -8,6 +8,8 @@ A modern, local-first CalDAV client engine and embeddable ASGI server for Python
 
 `icaldav` transforms CalDAV from a notoriously brittle network protocol into a fast, reliable local synchronization pipeline. By pairing `ical`'s type-safe data processing and recurrence engine with an `asyncio`-native sync engine and embeddable server router, `icaldav` completes the Python calendar ecosystem.
 
+For a detailed breakdown of the local-first synchronization model, dual-path sync engine, and server scope, see the [Design Document](DESIGN.md).
+
 ---
 
 ## Why `icaldav`?
