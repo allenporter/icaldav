@@ -26,7 +26,8 @@ repos:
       - id: ty
         name: ty check
         entry: ty check . --ignore unresolved-import
-        language: system
+        language: python
+        additional_dependencies: ["ty==0.0.18"]
         pass_filenames: false
   - repo: https://github.com/codespell-project/codespell
     rev: v2.2.6
