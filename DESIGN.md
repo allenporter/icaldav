@@ -168,7 +168,7 @@ CI integration testing runs against real-world CalDAV containers:
 - **Baïkal:** Validates multi-calendar discovery and standard WebDAV operations.
 
 ### 3. XML Snapshot Testing (`syrupy`)
-WebDAV request payloads (`calendar-query`, `sync-collection`, `calendar-multiget`) and Multi-Status XML responses are tested against snapshot fixtures using `syrupy`. This guarantees structural XML correctness and prevents regressions.
+WebDAV request payloads (`calendar-query`, `sync-collection`, `calendar-multiget`) and Multi-Status XML responses are tested against snapshot fixtures using `syrupy`. XML fixtures are seeded from standard test sources (such as `sabre-io/dav` XML test suites) to guarantee structural XML correctness.
 
 ### 4. Robust XML Namespace Isolation
 All XML parsing must be namespace-agnostic, stripping prefix assumptions (`d:`, `C:`, `ns0:`, `DAV:`):
@@ -182,3 +182,42 @@ The synchronization engine treats `.ics` calendar objects as raw, immutable text
 
 ### 6. Explicit RFC Spec Tracing
 Every XML generator, parser module, and test case must link directly to its governing RFC section in its docstrings (e.g., `# RFC 6578 Section 3.2: The DAV:sync-collection REPORT`).
+
+### 7. Industry Standard Compliance & Test Suite Sources
+To ensure maximum compatibility and avoid inventing ad-hoc test cases, `icaldav` leverages five industry-standard test suites and test vector sources:
+
+| Layer | Industry Source | Purpose / Scope |
+| :--- | :--- | :--- |
+| **Unit / Snapshots** | [`sabre-io/dav`](https://github.com/sabre-io/dav) XML Fixtures | Seeding XML request/response fixtures for unit and snapshot testing. |
+| **In-Process Sync** | `httpx.ASGITransport` + `CalDavRouter` | Zero-I/O client-server synchronization testing. |
+| **WebDAV Compliance** | [`notroj/litmus`](https://github.com/notroj/litmus) Test Runner | Automated RFC 4918 protocol compliance validation for `CalDavRouter`. |
+| **CalDAV Compliance** | [`CalConnect/caldavtester`](https://github.com/CalConnect/caldavtester) | Automated RFC 4791 & RFC 6578 scenario validation. |
+| **Server Integration** | [`python-caldav`](https://github.com/python-caldav/caldav) Test Matrix + Docker | Edge-case validation against Nextcloud, Stalwart, Radicale, and Baïkal. |
+
+---
+
+## 7. RFC Support Roadmap & Scope
+
+The WebDAV/CalDAV ecosystem spans dozens of individual IETF RFCs because every minor extension historically received its own document number. To avoid scope creep, `icaldav` explicitly categorizes RFCs into three support tiers:
+
+### Tier 1: Core Protocol Standards (Mandatory)
+These core standards form the foundation of `icaldav`'s client transport, sync engine, and embeddable server:
+- **[RFC 4791](https://datatracker.ietf.org/doc/html/rfc4791):** CalDAV Core — Calendar extensions to WebDAV (properties, `calendar-query`, `calendar-multiget`, `MKCALENDAR`).
+- **[RFC 4918](https://datatracker.ietf.org/doc/html/rfc4918):** WebDAV Core — `PROPFIND`, `PROPPATCH`, `MKCOL`, Multi-Status XML responses, HTTP status code extensions.
+- **[RFC 6578](https://datatracker.ietf.org/doc/html/rfc6578):** WebDAV Collection Synchronization — `DAV:sync-token` property and `<sync-collection>` `REPORT` for delta synchronization.
+- **[RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545):** iCalendar Core Data Format — Parsing, encoding, validation, and recurrence expansion (delegated to [`ical`](https://github.com/allenporter/ical)).
+- **[RFC 6868](https://datatracker.ietf.org/doc/html/rfc6868):** iCalendar Parameter Value Encoding — Character escaping in property parameters (delegated to `ical`).
+
+### Tier 2: Convenience & Extended Standards (Supported)
+Optional or auxiliary standards supported for enhanced discovery and compliance:
+- **[RFC 5397](https://datatracker.ietf.org/doc/html/rfc5397):** WebDAV Current Principal Extension — `DAV:current-user-principal` property for automatic user discovery.
+- **[RFC 5689](https://datatracker.ietf.org/doc/html/rfc5689):** Extended `MKCOL` — Creating calendar collections via extended `MKCOL` requests.
+- **[RFC 7986](https://datatracker.ietf.org/doc/html/rfc7986):** iCalendar Component Extensions — Support for newer iCalendar properties like `COLOR`, `IMAGE`, `CONFERENCE` (delegated to `ical`).
+- **[RFC 8536](https://datatracker.ietf.org/doc/html/rfc8536):** Timezone Information Format (TZif) — (delegated to `ical`).
+
+### Tier 3: Explicitly Excluded Standards (Out of Scope)
+These RFCs add massive complexity without benefitting local-first calendar synchronization or lightweight server routing:
+- **[RFC 6638](https://datatracker.ietf.org/doc/html/rfc6638):** CalDAV Scheduling Extensions — Server-side meeting invitations, outbox/inbox processing, organizer/attendee reply handling, and free-busy lookups between users.
+- **[RFC 3744](https://datatracker.ietf.org/doc/html/rfc3744):** WebDAV Access Control List (ACL) — Multi-user hierarchical permission inheritance trees.
+- **[RFC 6352](https://datatracker.ietf.org/doc/html/rfc6352) / [RFC 4792](https://datatracker.ietf.org/doc/html/rfc4792):** CardDAV — VCard and contact synchronization.
+- **[RFC 7211](https://datatracker.ietf.org/doc/html/rfc7211):** CalDAV Managed Attachments — Server-side binary attachment management.
