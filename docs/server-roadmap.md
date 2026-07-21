@@ -6,13 +6,13 @@ Feature gaps identified by comparing CalDavRouter against Radicale via live prot
 
 These are required for Apple Calendar, Thunderbird, and DAVx⁵ to discover and sync with our server.
 
-- [ ] **Honest DAV compliance header** — stop advertising `DAV: 2` (locking) and `access-control` that we don't implement; only advertise `1, calendar-access`
-- [ ] **`/.well-known/caldav` redirect** — 301 redirect to root (RFC 6764 §5); without this, clients can't auto-discover our server
-- [ ] **MKCALENDAR method** — create calendar collections (RFC 4791 §5.3.1); currently returns 405
-- [ ] **Principal discovery properties** — return `DAV:current-user-principal` and `CALDAV:calendar-home-set` in PROPFIND responses (RFC 5397 §3, RFC 4791 §6.2.1)
-- [ ] **REPORT method: calendar-query** — filter events by component type, date range, etc. (RFC 4791 §7.8); this is how real clients fetch events efficiently
-- [ ] **REPORT method: calendar-multiget** — batch-fetch multiple resources by href (RFC 4791 §7.9); used by clients after PROPFIND to bulk-download changed events
-- [ ] **404 propstat for unsupported properties** — when a client requests properties we don't have (e.g. `displayname` on a resource), return them grouped under a `404` propstat block instead of silently omitting them (RFC 4918 §9.1)
+- [x] **Honest DAV compliance header** — stop advertising `DAV: 2` (locking) and `access-control` that we don't implement; only advertise `1, calendar-access`
+- [x] **`/.well-known/caldav` redirect** — 301 redirect to root (RFC 6764 §5); without this, clients can't auto-discover our server
+- [x] **MKCALENDAR method** — create calendar collections (RFC 4791 §5.3.1); currently returns 405
+- [x] **Principal discovery properties** — return `DAV:current-user-principal` and `CALDAV:calendar-home-set` in PROPFIND responses (RFC 5397 §3, RFC 4791 §6.2.1)
+- [x] **REPORT method: calendar-query** — filter events by component type, date range, etc. (RFC 4791 §7.8); this is how real clients fetch events efficiently
+- [x] **REPORT method: calendar-multiget** — batch-fetch multiple resources by href (RFC 4791 §7.9); used by clients after PROPFIND to bulk-download changed events
+- [x] **404 propstat for unsupported properties** — when a client requests properties we don't have (e.g. `displayname` on a resource), return them grouped under a `404` propstat block instead of silently omitting them (RFC 4918 §9.1)
 
 ## Should-Have: Correctness & Polish
 

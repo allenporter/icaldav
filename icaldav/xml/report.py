@@ -287,10 +287,7 @@ def build_report_response(
     Returns:
         XML response body as bytes.
     """
-    root = ET.Element(
-        qname(DAV, "multistatus"),
-        attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
-    )
+    root = ET.Element(qname(DAV, "multistatus"))
 
     for resource in resources:
         resp = ET.SubElement(root, qname(DAV, "response"))
@@ -356,10 +353,7 @@ def build_calendar_query_xml(
     if props is None:
         props = ["getetag", "calendar-data"]
 
-    root = ET.Element(
-        qname(CALDAV, "calendar-query"),
-        attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
-    )
+    root = ET.Element(qname(CALDAV, "calendar-query"))
 
     # <D:prop>
     prop_elem = ET.SubElement(root, qname(DAV, "prop"))
@@ -414,10 +408,7 @@ def build_calendar_multiget_xml(
     if props is None:
         props = ["getetag", "calendar-data"]
 
-    root = ET.Element(
-        qname(CALDAV, "calendar-multiget"),
-        attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
-    )
+    root = ET.Element(qname(CALDAV, "calendar-multiget"))
 
     # <D:prop>
     prop_elem = ET.SubElement(root, qname(DAV, "prop"))
