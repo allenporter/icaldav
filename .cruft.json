@@ -1,0 +1,17 @@
+{
+  "template": "https://github.com/allenporter/cookiecutter-python",
+  "commit": "77b2b85fd97dd3ae2948d13e515bdc08e52b3d85",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "full_name": "Allen Porter",
+      "email": "allen.porter@gmail.com",
+      "github_username": "allenporter",
+      "project_name": "icaldav",
+      "description": "icaldav transforms CalDAV into a fast, reliable local synchronization pipeline. By pairing ical's data processing power with a modern asyncio sync engine and embeddable server router, icaldav completes the Python calendar ecosystem.",
+      "version": "0.0.1",
+      "_template": "https://github.com/allenporter/cookiecutter-python"
+    }
+  },
+  "directory": null
+}

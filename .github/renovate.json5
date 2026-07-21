@@ -1,0 +1,36 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    'helpers:pinGitHubActionDigests',
+  ],
+  assignees: [
+    'allenporter',
+  ],
+  packageRules: [
+    {
+      description: 'Minor updates are automatic',
+      automerge: true,
+      automergeType: 'branch',
+      matchUpdateTypes: [
+        'minor',
+        'patch',
+      ],
+    },
+    {
+      description: 'Automerge major updates for dev-time tools (Actions, pre-commit, requirements_dev.txt)',
+      matchUpdateTypes: ['major'],
+      matchManagers: ['github-actions', 'pre-commit', 'pip_requirements'],
+      automerge: true,
+      automergeType: 'branch',
+    },
+  ],
+  pip_requirements: {
+    managerFilePatterns: [
+      '/requirements_dev.txt/',
+    ],
+  },
+  'pre-commit': {
+    enabled: true,
+  },
+}
