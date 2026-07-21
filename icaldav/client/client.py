@@ -4,6 +4,8 @@ RFC References:
   - RFC 4918 Section 9.1: PROPFIND Method.
   - RFC 4918 Section 9.7: DELETE Method.
   - RFC 4791 Section 5.2: Calendar Object Resources (GET / PUT).
+  - RFC 4791 Section 7.8: calendar-query REPORT.
+  - RFC 4791 Section 7.9: calendar-multiget REPORT.
   - RFC 7617: HTTP Basic Authentication.
   - RFC 6750: OAuth 2.0 Bearer Token Usage.
   - RFC 7235 Section 4.1: WWW-Authenticate Header Field.
@@ -15,6 +17,12 @@ import aiohttp
 
 from icaldav.client.exceptions import CalDavAuthError
 from icaldav.xml.propfind import PropfindItem, build_propfind_xml, parse_multistatus_xml
+from icaldav.xml.report import (
+    ReportResource,
+    build_calendar_multiget_xml,
+    build_calendar_query_xml,
+    parse_report_response,
+)
 
 
 class CalDavClient:
@@ -228,3 +236,86 @@ class CalDavClient:
 
         async with session.delete(url, headers=headers) as resp:
             self._check_response(resp)
+
+    async def calendar_query(
+        self,
+        url: str,
+        component: str = "VEVENT",
+        time_start: str | None = None,
+        time_end: str | None = None,
+    ) -> list[ReportResource]:
+        """Perform a CalDAV calendar-query REPORT to filter resources by type and time range.
+
+        Sends a REPORT request with a <C:calendar-query> body that filters
+        calendar resources by component type (VEVENT, VTODO, etc.) and optional
+        time-range constraints. Returns matching resources with ETags and iCalendar data.
+
+        RFC Reference:
+            - RFC 4791 Section 7.8: CALDAV:calendar-query REPORT.
+            - RFC 3253 Section 3.6: REPORT Method.
+
+        Args:
+            url: Target collection URI path.
+            component: iCalendar component type to filter (default 'VEVENT').
+            time_start: Optional UTC start boundary (e.g. '20260701T000000Z').
+            time_end: Optional UTC end boundary (e.g. '20260801T000000Z').
+
+        Returns:
+            List of ReportResource objects for matching calendar resources.
+
+        Raises:
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
+            aiohttp.ClientResponseError: If the server returns a non-207 status code.
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        body = build_calendar_query_xml(
+            component=component, time_start=time_start, time_end=time_end
+        )
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Depth": "1",
+        }
+
+        async with session.request("REPORT", url, data=body, headers=headers) as resp:
+            self._check_response(resp)
+            content = await resp.read()
+            return parse_report_response(content)
+
+    async def calendar_multiget(
+        self,
+        url: str,
+        hrefs: list[str],
+    ) -> list[ReportResource]:
+        """Perform a CalDAV calendar-multiget REPORT to batch-fetch resources by href.
+
+        Sends a REPORT request with a <C:calendar-multiget> body containing
+        a list of resource hrefs. Returns the resources with ETags and iCalendar
+        data in a single round-trip, avoiding individual GET requests.
+
+        RFC Reference:
+            - RFC 4791 Section 7.9: CALDAV:calendar-multiget REPORT.
+            - RFC 3253 Section 3.6: REPORT Method.
+
+        Args:
+            url: Target collection URI path.
+            hrefs: List of resource href paths to retrieve.
+
+        Returns:
+            List of ReportResource objects for found resources.
+
+        Raises:
+            CalDavAuthError: If authentication is required or rejected (HTTP 401/403).
+            aiohttp.ClientResponseError: If the server returns a non-207 status code.
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        body = build_calendar_multiget_xml(hrefs=hrefs)
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+        }
+
+        async with session.request("REPORT", url, data=body, headers=headers) as resp:
+            self._check_response(resp)
+            content = await resp.read()
+            return parse_report_response(content)

@@ -15,7 +15,14 @@ import xml.etree.ElementTree as ET
 from aiohttp import web
 
 from icaldav.store.types import CalendarResource, LocalStore
-from icaldav.xml.namespaces import CALDAV, DAV, qname
+from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
+from icaldav.filter import matches_comp_filter
+from icaldav.xml.report import (
+    ReportResource,
+    build_report_response,
+    parse_calendar_multiget,
+    parse_calendar_query,
+)
 
 
 def path_args(
@@ -54,8 +61,13 @@ class CalDavRouter:
         """
         app = web.Application(client_max_size=2 * 1024 * 1024)  # 2MB limit
 
+        # Well-known CalDAV discovery (RFC 6764 §5)
+        app.router.add_route("GET", "/.well-known/caldav", self.handle_well_known)
+
         # Collection & Resource Routes
         app.router.add_route("OPTIONS", "/{tail:.*}", self.handle_options)
+        app.router.add_route("MKCALENDAR", "/{collection_id}", self.handle_mkcalendar)
+        app.router.add_route("REPORT", "/{collection_id}", self.handle_report)
         app.router.add_route(
             "PROPFIND", "/{collection_id}", self.handle_propfind_collection
         )
@@ -86,8 +98,8 @@ class CalDavRouter:
             HTTP 200 OK response with DAV capability headers.
         """
         headers = {
-            "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND",
-            "DAV": "1, 2, access-control, calendar-access",
+            "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR",
+            "DAV": "1, calendar-access",
         }
         return web.Response(status=200, headers=headers)
 
@@ -324,6 +336,140 @@ class CalDavRouter:
             return web.Response(status=404, text="Resource Not Found")
 
         return web.Response(status=204)
+
+    async def handle_well_known(self, request: web.Request) -> web.Response:
+        """Handle /.well-known/caldav discovery redirect.
+
+        RFC 6764 §5 requires CalDAV servers to redirect /.well-known/caldav
+        to the CalDAV service context path. This enables clients (Apple Calendar,
+        Thunderbird, DAVx⁵) to auto-discover the server by only knowing the hostname.
+
+        The redirect uses HTTP 301 (Moved Permanently) so clients cache the location.
+        """
+        raise web.HTTPMovedPermanently(location="/")
+
+    @path_args
+    async def handle_mkcalendar(
+        self, request: web.Request, collection_id: str
+    ) -> web.Response:
+        """Handle MKCALENDAR request to create a new calendar collection.
+
+        RFC Reference:
+            - RFC 4791 Section 5.3.1: Creating Calendar Collections.
+
+        Creates a new empty calendar collection. Returns 201 Created on success,
+        or 405 Method Not Allowed if the collection already exists.
+        """
+        if await self.store.collection_exists(collection_id):
+            return web.Response(status=405, text="Collection already exists")
+
+        await self.store.create_collection(collection_id)
+        return web.Response(status=201)
+
+    @path_args
+    async def handle_report(
+        self, request: web.Request, collection_id: str
+    ) -> web.Response:
+        """Handle REPORT request dispatching to calendar-query or calendar-multiget.
+
+        RFC Reference:
+            - RFC 3253 Section 3.6: REPORT Method.
+            - RFC 4791 Section 7.8: calendar-query REPORT.
+            - RFC 4791 Section 7.9: calendar-multiget REPORT.
+        """
+        body_bytes = await request.read()
+        if not body_bytes:
+            return web.Response(status=400, text="REPORT requires XML body")
+
+        try:
+            root = ET.fromstring(body_bytes)
+        except ET.ParseError:
+            return web.Response(status=400, text="Invalid XML")
+
+        root_tag = strip_ns(root.tag)
+
+        if root_tag == "calendar-query":
+            return await self._handle_calendar_query(collection_id, body_bytes)
+        elif root_tag == "calendar-multiget":
+            return await self._handle_calendar_multiget(collection_id, body_bytes)
+        else:
+            return web.Response(status=400, text=f"Unsupported REPORT type: {root_tag}")
+
+    async def _handle_calendar_query(
+        self, collection_id: str, body_bytes: bytes
+    ) -> web.Response:
+        """Evaluate a calendar-query REPORT against stored resources.
+
+        RFC Reference:
+            - RFC 4791 Section 7.8: calendar-query REPORT.
+
+        Process:
+            1. Parse the XML request to extract filter criteria.
+            2. Load all resources from the store.
+            3. Evaluate each resource against the comp-filter tree.
+            4. Build 207 Multi-Status response with matching resources.
+        """
+        query = parse_calendar_query(body_bytes)
+        all_resources = await self.store.get_resources(collection_id)
+
+        include_data = "calendar-data" in query.props
+        matched = []
+        for resource in all_resources:
+            if matches_comp_filter(resource.ics_data, query.comp_filter):
+                matched.append(
+                    ReportResource(
+                        href=resource.href,
+                        etag=resource.etag,
+                        ics_data=resource.ics_data if include_data else None,
+                    )
+                )
+
+        xml_bytes = build_report_response(matched)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
+
+    async def _handle_calendar_multiget(
+        self, collection_id: str, body_bytes: bytes
+    ) -> web.Response:
+        """Resolve specific resource hrefs for a calendar-multiget REPORT.
+
+        RFC Reference:
+            - RFC 4791 Section 7.9: calendar-multiget REPORT.
+
+        Process:
+            1. Parse the XML request to extract href list.
+            2. Resolve each href from the store.
+            3. Build 207 Multi-Status response with found (200) and missing (404) resources.
+        """
+        multiget = parse_calendar_multiget(body_bytes)
+        include_data = "calendar-data" in multiget.props
+
+        found = []
+        missing = []
+        for href in multiget.hrefs:
+            resource = await self.store.get_resource(collection_id, href)
+            if resource:
+                found.append(
+                    ReportResource(
+                        href=resource.href,
+                        etag=resource.etag,
+                        ics_data=resource.ics_data if include_data else None,
+                    )
+                )
+            else:
+                missing.append(href)
+
+        xml_bytes = build_report_response(found, missing_hrefs=missing)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
 
 
 def create_app(store: LocalStore) -> web.Application:
