@@ -130,3 +130,42 @@ def test_parse_multistatus_billion_laughs_returns_empty() -> None:
     """
     items = parse_multistatus_xml(BILLION_LAUGHS_XML)
     assert items == []
+
+
+def test_build_propfind_xml_allprop() -> None:
+    """Test generating <d:propfind> with empty props list produces <allprop> element."""
+    xml_bytes = build_propfind_xml(None)
+    assert b"allprop" in xml_bytes
+
+    xml_bytes_empty = build_propfind_xml([])
+    assert b"allprop" in xml_bytes_empty
+
+
+def test_build_propfind_xml_qualified_props() -> None:
+    """Test generating <d:propfind> with Clark-notation namespace qualified properties."""
+    props = ["{DAV:}displayname", "{urn:ietf:params:xml:ns:caldav}calendar-data"]
+    xml_bytes = build_propfind_xml(props)
+    assert b"displayname" in xml_bytes
+    assert b"calendar-data" in xml_bytes
+
+
+def test_parse_multistatus_xml_edge_cases() -> None:
+    """Test parse_multistatus_xml with empty bytes, whitespace, and non-numeric status code."""
+    assert parse_multistatus_xml(b"") == []
+    assert parse_multistatus_xml(b"   \n  ") == []
+
+    non_numeric_status_xml = b"""<?xml version="1.0" encoding="utf-8"?>
+    <d:multistatus xmlns:d="DAV:">
+        <d:response>
+            <d:href>/work/test.ics</d:href>
+            <d:propstat>
+                <d:prop><d:getetag>abc</d:getetag></d:prop>
+                <d:status>HTTP/1.1 INVALID_STATUS OK</d:status>
+            </d:propstat>
+        </d:response>
+    </d:multistatus>
+    """
+    items = parse_multistatus_xml(non_numeric_status_xml)
+    assert len(items) == 1
+    # Fallback status code is 200
+    assert items[0].propstats[0].status_code == 200

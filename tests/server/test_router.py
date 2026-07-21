@@ -62,6 +62,7 @@ async def test_server_crud_flow() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_root_propfind_autodiscovery() -> None:
     """Test PROPFIND / root autodiscovery endpoint."""
     store = MemoryStore()
@@ -97,3 +98,50 @@ async def test_propfind_404_propstat_grouping() -> None:
         assert "HTTP/1.1 200 OK" in xml_text
         assert "HTTP/1.1 404 Not Found" in xml_text
         assert "unsupported_custom_property" in xml_text
+
+
+@pytest.mark.asyncio
+async def test_propfind_individual_resource() -> None:
+    """Test PROPFIND query on an individual calendar object resource."""
+    store = MemoryStore()
+    app = create_app(store)
+
+    async with TestClient(TestServer(app)) as client:
+        # PROPFIND non-existent resource returns 404
+        pf_resp = await client.request("PROPFIND", "/work/missing.ics")
+        assert pf_resp.status == 404
+
+        # PUT resource
+        ics_payload = (
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:999\r\nEND:VEVENT\r\nEND:VCALENDAR"
+        )
+        await client.put("/work/event999.ics", data=ics_payload)
+
+        # PROPFIND existing resource returns 207 Multi-Status XML with ETag
+        pf_resp = await client.request("PROPFIND", "/work/event999.ics")
+        assert pf_resp.status == 207
+        xml_text = await pf_resp.text()
+        assert "/work/event999.ics" in xml_text
+        assert "getetag" in xml_text
+
+
+@pytest.mark.asyncio
+async def test_report_error_paths() -> None:
+    """Test router error responses for invalid REPORT requests."""
+    store = MemoryStore()
+    app = create_app(store)
+
+    async with TestClient(TestServer(app)) as client:
+        # 1. Empty body REPORT returns 400
+        resp = await client.request("REPORT", "/work", data="")
+        assert resp.status == 400
+
+        # 2. Invalid XML REPORT returns 400
+        resp = await client.request("REPORT", "/work", data="<not-valid-xml")
+        assert resp.status == 400
+
+        # 3. Unsupported REPORT type tag returns 400
+        resp = await client.request(
+            "REPORT", "/work", data="<unsupported-report xmlns='DAV:'/>"
+        )
+        assert resp.status == 400
