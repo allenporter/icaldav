@@ -194,17 +194,13 @@ class CalDavRouter:
         is_collection: bool,
         etag: str | None = None,
     ) -> None:
-        """Append a <DAV:response> element to a <DAV:multistatus> root XML element.
+        """Append a single <DAV:response> element to a <DAV:multistatus> root XML element.
 
-        Multi-Status Concept:
-            WebDAV uses HTTP 207 Multi-Status and an XML `<DAV:multistatus>` container because a single
-            request can query multiple resources or properties, each potentially returning a different
-            status code (e.g. HTTP 200 OK vs 404 Not Found). This helper appends a `<DAV:response>`
-            node containing the resource's `href` and a `<DAV:propstat>` element grouping its properties
-            under `HTTP/1.1 200 OK`.
+        Appends a response node containing the resource's `href` and a `<DAV:propstat>`
+        element grouping its properties under status `HTTP/1.1 200 OK`.
 
         Args:
-            root: Top-level `<DAV:multistatus>` ElementTree node.
+            root: Parent `<DAV:multistatus>` ElementTree node.
             href: Relative URI path of the resource or collection.
             is_collection: True if this node represents a calendar collection folder.
             etag: Optional entity tag string for file resources.
@@ -265,10 +261,16 @@ class CalDavRouter:
     async def handle_put(
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
-        """Handle PUT request to create or update a calendar object resource.
+        """Handle PUT request to create or replace an entire calendar object resource file.
+
+        PUT Operation Scope:
+            Per RFC 4791 Section 5.3.1, a PUT request creates or replaces the ENTIRE calendar object
+            resource (`.ics` payload) stored at the target `resource_id` path. This document can
+            represent an event (`VEVENT`), a to-do task (`VTODO`), or a journal entry (`VJOURNAL`).
+            This operation is a complete payload overwrite, not a partial field or UID update.
 
         RFC Reference:
-            - RFC 4791 Section 5.3.1: Creating Calendar Object Resources.
+            - RFC 4791 Section 5.3.1: Creating or Replacing Calendar Object Resources.
 
         Args:
             request: The incoming HTTP request.
@@ -276,7 +278,7 @@ class CalDavRouter:
             resource_id: Target resource filename string.
 
         Returns:
-            HTTP 201 Created or 204 No Content with ETag header.
+            HTTP 201 Created (if new) or 204 No Content (if updated) with ETag header.
         """
         href = f"/{collection_id}/{resource_id}"
 
