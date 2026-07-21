@@ -27,7 +27,7 @@ CalDAV servers in the wild vary wildly in their adherence to RFC standards, part
 | icaldav                                                                           |
 |                                                                                   |
 |  +------------------------+  RFC 6578 / ETag  +-------------------------------+  |
-|  |  CalDavClient (httpx)  |  ---------------> | CalDavSyncManager             |  |
+|  | CalDavClient (aiohttp) |  ---------------> | CalDavSyncManager             |  |
 |  +------------------------+                   +-------------------------------+  |
 |                                                               |                   |
 |                                                               v                   |
@@ -151,12 +151,11 @@ Built-in implementations will include:
 
 To ensure high reliability, fast local development iterations, and strict compliance, the project strictly adheres to six core testing and implementation principles:
 
-### 1. In-Process Loopback Testing (ASGI Client + Server)
-Unit tests for `CalDavClient` and `CalDavSyncManager` must use `httpx.ASGITransport` wired directly to `CalDavRouter`:
+### 1. In-Process Loopback Testing (aiohttp Client + Server)
+Unit tests for `CalDavClient` and `CalDavSyncManager` must use `aiohttp.test_utils` wired directly to `CalDavRouter`:
 ```python
 # In-process loopback testing with zero network I/O
-transport = httpx.ASGITransport(app=caldav_router_app)
-async with CalDavClient(transport=transport, base_url="http://test") as client:
+async with TestClient(TestServer(caldav_router_app)) as client:
     ...
 ```
 This enables executing hundreds of client-server synchronization tests in milliseconds without network overhead or Docker setup.
@@ -189,7 +188,7 @@ To ensure maximum compatibility and avoid inventing ad-hoc test cases, `icaldav`
 | Layer | Industry Source | Purpose / Scope |
 | :--- | :--- | :--- |
 | **Unit / Snapshots** | [`sabre-io/dav`](https://github.com/sabre-io/dav) XML Fixtures | Seeding XML request/response fixtures for unit and snapshot testing. |
-| **In-Process Sync** | `httpx.ASGITransport` + `CalDavRouter` | Zero-I/O client-server synchronization testing. |
+| **In-Process Sync** | `aiohttp.test_utils` + `CalDavRouter` | Zero-I/O client-server synchronization testing. |
 | **WebDAV Compliance** | [`notroj/litmus`](https://github.com/notroj/litmus) Test Runner | Automated RFC 4918 protocol compliance validation for `CalDavRouter`. |
 | **CalDAV Compliance** | [`CalConnect/caldavtester`](https://github.com/CalConnect/caldavtester) | Automated RFC 4791 & RFC 6578 scenario validation. |
 | **Server Integration** | [`python-caldav`](https://github.com/python-caldav/caldav) Test Matrix + Docker | Edge-case validation against Nextcloud, Stalwart, Radicale, and Baïkal. |

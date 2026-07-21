@@ -20,7 +20,7 @@ Rather than relying on distant servers to perform complex date filtering or recu
 
 | Feature | `icaldav` | `python-caldav` | Raw WebDAV Tools |
 | :--- | :--- | :--- | :--- |
-| **Async Native (`asyncio`)** | ✅ First-class (`httpx`) | ⚠️ Partial wrapper module | ❌ Sync only |
+| **Async Native (`asyncio`)** | ✅ First-class (`aiohttp`) | ⚠️ Partial wrapper module | ❌ Sync only |
 | **Data Engine** | ✅ `ical` (Pydantic v2) | ❌ `icalendar` / `vobject` | ❌ None (raw XML/strings) |
 | **Recurrence Handling** | ✅ Local & exact (`Timeline`) | ⚠️ Relies on client (`icalendar`) | ❌ None |
 | **Incremental Sync** | ✅ RFC 6578 + ETag Fallback | ⚠️ Experimental | ❌ Manual |
@@ -31,7 +31,7 @@ Rather than relying on distant servers to perform complex date filtering or recu
 
 ## Key Features
 
-- **⚡ Async Client (`CalDavClient`):** Built with `asyncio` and `httpx` for high-performance HTTP/2 communication and type-safe `ical` Pydantic models.
+- **⚡ Async Client (`CalDavClient`):** Built with `asyncio` and `aiohttp` for high-performance HTTP communication and type-safe `ical` Pydantic models.
 - **🔄 Resilient Sync Engine (`CalDavSyncManager`):** Supports **RFC 6578 (WebDAV Collection Synchronization)** for single-request delta fetches, with automatic **ETag fallback** for non-RFC 6578 servers (e.g. Radicale, iCloud).
 - **🧩 Local-First Recurrence & Queries:** Performs time-range slicing and recurrence expansions locally via `ical`'s `Timeline`, avoiding server-side `calendar-query` bugs.
 - **🚀 Embeddable ASGI Server Router (`CalDavRouter`):** Mount a minimalist CalDAV server endpoint into FastAPI, Starlette, or `aiohttp` applications to expose calendars to native iOS, macOS, or Thunderbird clients.
