@@ -4,7 +4,7 @@ requires = ["setuptools>=77.0"]
 
 [project]
 name = "icaldav"
-version = "0.0.1"
+version = "0.0.2"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 description = "icaldav transforms CalDAV into a fast, reliable local synchronization pipeline. By pairing ical's data processing power with a modern asyncio sync engine and embeddable server router, icaldav completes the Python calendar ecosystem."
