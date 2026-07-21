@@ -311,6 +311,59 @@ class OAuthSession:
             token_type=data.get("token_type", "Bearer"),
         )
 
+    @staticmethod
+    async def fetch_code_from_callback(port: int = 8088, timeout: float = 300.0) -> str:
+        """Start a temporary local HTTP server to receive the OAuth authorization code redirect.
+
+        Args:
+            port: Local TCP port for the callback server (default 8088).
+            timeout: Maximum seconds to wait for redirect (default 300s).
+
+        Returns:
+            Extracted authorization code string.
+
+        Raises:
+            asyncio.TimeoutError: If no callback is received within the timeout.
+            Exception: If an OAuth error parameter is returned in the query string.
+        """
+        import asyncio
+        from aiohttp import web
+
+        code_future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+        async def handle_callback(request: web.Request) -> web.Response:
+            code = request.query.get("code")
+            error = request.query.get("error")
+            if error:
+                code_future.set_exception(Exception(f"OAuth error: {error}"))
+                return web.Response(
+                    text="Authorization failed. You can close this tab.",
+                    content_type="text/plain",
+                )
+            if code:
+                code_future.set_result(code)
+                return web.Response(
+                    text="Authorization successful! You can close this tab.",
+                    content_type="text/plain",
+                )
+            return web.Response(
+                text="Missing authorization code.",
+                status=400,
+                content_type="text/plain",
+            )
+
+        app = web.Application()
+        app.router.add_get("/", handle_callback)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "localhost", port)
+        await site.start()
+
+        try:
+            return await asyncio.wait_for(code_future, timeout=timeout)
+        finally:
+            await runner.cleanup()
+
 
 class OAuthTokenManager:
     """Manages access token validation and auto-refresh for an AuthProfile.

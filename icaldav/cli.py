@@ -311,53 +311,22 @@ async def run_auth_async(args: argparse.Namespace) -> int:
             or ["https://www.googleapis.com/auth/calendar"],
         )
 
-        # 3. Build auth URL with PKCE
+        # 3. Build auth URL with PKCE and open browser
         auth_url, code_verifier = OAuthSession.authorize_url(config)
         print("\nOpening browser for authorization...")
         print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
         webbrowser.open(auth_url)
 
-        # 4. Start temporary callback server to receive the authorization code
-        code_future: asyncio.Future[str] = asyncio.get_event_loop().create_future()
-
-        async def handle_callback(request: web.Request) -> web.Response:
-            code = request.query.get("code")
-            error = request.query.get("error")
-            if error:
-                code_future.set_exception(Exception(f"OAuth error: {error}"))
-                return web.Response(
-                    text="Authorization failed. You can close this tab.",
-                    content_type="text/plain",
-                )
-            if code:
-                code_future.set_result(code)
-                return web.Response(
-                    text="Authorization successful! You can close this tab.",
-                    content_type="text/plain",
-                )
-            return web.Response(
-                text="Missing authorization code.",
-                status=400,
-                content_type="text/plain",
-            )
-
-        callback_app = web.Application()
-        callback_app.router.add_get("/", handle_callback)
-
-        runner = web.AppRunner(callback_app)
-        await runner.setup()
-        site = web.TCPSite(runner, "localhost", args.port)
-        await site.start()
+        # 4. Receive authorization code via temporary callback listener
         print(f"Waiting for OAuth callback on http://localhost:{args.port} ...")
-
         try:
-            code = await asyncio.wait_for(code_future, timeout=300)
+            code = await OAuthSession.fetch_code_from_callback(port=args.port)
         except asyncio.TimeoutError:
             print("Error: OAuth callback timed out after 5 minutes.", file=sys.stderr)
-            await runner.cleanup()
             return 1
-        finally:
-            await runner.cleanup()
+        except Exception as err:
+            print(f"Error receiving authorization code: {err}", file=sys.stderr)
+            return 1
 
         # 5. Exchange code for tokens
         print("Exchanging authorization code for tokens...")
