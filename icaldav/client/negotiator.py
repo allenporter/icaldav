@@ -13,6 +13,8 @@ from multidict import CIMultiDictProxy
 from icaldav.client.oauth import OAuthConfig, discover_oauth_config
 from icaldav.xml.propfind.request import build_propfind_xml
 
+from enum import Enum
+
 _LOGGER = logging.getLogger(__name__)
 
 # Known provider mapping (hostname -> OpenID issuer URL)
@@ -30,11 +32,22 @@ KNOWN_OAUTH_ISSUERS: dict[str, str] = {
 _REALM_RE = re.compile(r'realm="([^"]*)"', re.IGNORECASE)
 
 
+class AuthScheme(str, Enum):
+    """Enumeration of supported CalDAV authentication schemes."""
+
+    BASIC = "basic"
+    BEARER = "bearer"
+    OAUTH = "oauth"
+    NONE = "none"
+    DIGEST = "digest"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class AuthMethod:
     """Authentication method details returned by AuthNegotiator.probe()."""
 
-    scheme: str
+    scheme: AuthScheme
     realm: str | None = None
     oauth_config: OAuthConfig | None = None
 
@@ -55,17 +68,17 @@ class AuthNegotiator:
                     "PROPFIND", url, data=body, headers=headers
                 ) as resp:
                     if 200 <= resp.status < 300:
-                        return [AuthMethod(scheme="none")]
+                        return [AuthMethod(scheme=AuthScheme.NONE)]
 
                     if resp.status != 401:
-                        return [AuthMethod(scheme="unknown")]
+                        return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
 
                     challenges = self._parse_challenges(resp.headers)
                     if not challenges and hostname in KNOWN_OAUTH_ISSUERS:
                         challenges = [("Bearer", None)]
 
                     if not challenges:
-                        return [AuthMethod(scheme="unknown")]
+                        return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
 
                     methods = []
                     for scheme, realm in challenges:
@@ -97,20 +110,24 @@ class AuthNegotiator:
         self, scheme: str, realm: str | None, hostname: str, url_scheme: str
     ) -> AuthMethod:
         """Resolve a challenge scheme into an AuthMethod with optional OAuth config."""
-        scheme_lower = scheme.lower()
-        if scheme_lower != "bearer":
-            return AuthMethod(scheme=scheme_lower, realm=realm)
+        try:
+            scheme_enum = AuthScheme(scheme.lower())
+        except ValueError:
+            scheme_enum = AuthScheme.UNKNOWN
+
+        if scheme_enum != AuthScheme.BEARER:
+            return AuthMethod(scheme=scheme_enum, realm=realm)
 
         issuer_url = KNOWN_OAUTH_ISSUERS.get(hostname)
         if issuer_url == "":
-            return AuthMethod(scheme="bearer", realm=realm)
+            return AuthMethod(scheme=AuthScheme.BEARER, realm=realm)
 
         if not issuer_url:
             issuer_url = f"{url_scheme}://{hostname}"
 
         try:
             config = await discover_oauth_config(issuer_url)
-            return AuthMethod(scheme="oauth", realm=realm, oauth_config=config)
+            return AuthMethod(scheme=AuthScheme.OAUTH, realm=realm, oauth_config=config)
         except Exception:
             _LOGGER.debug("OIDC discovery failed for %s", issuer_url, exc_info=True)
-            return AuthMethod(scheme="bearer", realm=realm)
+            return AuthMethod(scheme=AuthScheme.BEARER, realm=realm)
