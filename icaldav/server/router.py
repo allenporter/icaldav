@@ -1,44 +1,21 @@
 """Embeddable WebDAV / CalDAV web application router based on aiohttp.web.
 
 RFC References:
-  - RFC 4918 Section 9.1: PROPFIND Method.
-  - RFC 4918 Section 9.7: DELETE Method.
-  - RFC 4918 Section 9.10: OPTIONS Method.
-  - RFC 4791 Section 4: Calendar Collections & CalDAV Extensions.
-  - RFC 4791 Section 5: Calendar Object Resources.
+  - RFC 4918: WebDAV Specification.
+  - RFC 4791: CalDAV Specification.
 """
 
-from functools import wraps
-import hashlib
-import logging
-from typing import Any, Callable, Coroutine
-import xml.etree.ElementTree as ET
 from aiohttp import web
 
-from icaldav.filter import matches_comp_filter
-from icaldav.store.types import CalendarResource, LocalStore
-from icaldav.xml.namespaces import DAV, qname, strip_ns
-from icaldav.xml.propfind import append_propfind_response, parse_propfind_request
-from icaldav.xml.report import (
-    ReportResource,
-    build_report_response,
-    parse_calendar_multiget,
-    parse_calendar_query,
+from icaldav.server.handlers import (
+    CollectionHandler,
+    PropfindHandler,
+    ReportHandler,
+    ResourceHandler,
+    handle_options,
+    handle_well_known,
 )
-
-_LOGGER = logging.getLogger(__name__)
-
-
-def path_args(
-    func: Callable[..., Coroutine[Any, Any, web.Response]],
-) -> Callable[..., Coroutine[Any, Any, web.Response]]:
-    """Decorator unpacking request.match_info directly into handler keyword arguments."""
-
-    @wraps(func)
-    async def wrapper(self: Any, request: web.Request) -> web.Response:
-        return await func(self, request, **request.match_info)
-
-    return wrapper
+from icaldav.store.types import LocalStore
 
 
 class CalDavRouter:
@@ -56,6 +33,10 @@ class CalDavRouter:
             store: An implementation of the LocalStore protocol.
         """
         self.store = store
+        self.propfind_handler = PropfindHandler(store)
+        self.report_handler = ReportHandler(store)
+        self.resource_handler = ResourceHandler(store)
+        self.collection_handler = CollectionHandler(store)
 
     def create_app(self) -> web.Application:
         """Create and configure an aiohttp.web.Application with WebDAV routes.
@@ -65,425 +46,43 @@ class CalDavRouter:
         """
         app = web.Application(client_max_size=2 * 1024 * 1024)  # 2MB limit
 
-        # Well-known & Root CalDAV discovery (RFC 6764 §5, RFC 5397 §3)
-        app.router.add_route("GET", "/.well-known/caldav", self.handle_well_known)
-        app.router.add_route("PROPFIND", "/", self.handle_propfind_root)
+        # Discovery & Autodiscovery (RFC 6764 §5, RFC 5397 §3)
+        app.router.add_route("GET", "/.well-known/caldav", handle_well_known)
+        app.router.add_route("OPTIONS", "/{tail:.*}", handle_options)
+        app.router.add_route("PROPFIND", "/", self.propfind_handler.handle_root)
 
-        # Collection & Resource Routes
-        app.router.add_route("OPTIONS", "/{tail:.*}", self.handle_options)
-        app.router.add_route("MKCALENDAR", "/{collection_id}", self.handle_mkcalendar)
-        app.router.add_route("REPORT", "/{collection_id}", self.handle_report)
+        # Collections
         app.router.add_route(
-            "PROPFIND", "/{collection_id}", self.handle_propfind_collection
+            "MKCALENDAR", "/{collection_id}", self.collection_handler.handle_mkcalendar
         )
+        app.router.add_route(
+            "PROPFIND", "/{collection_id}", self.propfind_handler.handle_collection
+        )
+        app.router.add_route(
+            "REPORT", "/{collection_id}", self.report_handler.handle_report
+        )
+
+        # Resources
         app.router.add_route(
             "PROPFIND",
             "/{collection_id}/{resource_id}",
-            self.handle_propfind_resource,
+            self.propfind_handler.handle_resource,
         )
-        app.router.add_route("GET", "/{collection_id}/{resource_id}", self.handle_get)
-        app.router.add_route("PUT", "/{collection_id}/{resource_id}", self.handle_put)
         app.router.add_route(
-            "DELETE", "/{collection_id}/{resource_id}", self.handle_delete
+            "GET", "/{collection_id}/{resource_id}", self.resource_handler.handle_get
+        )
+        app.router.add_route(
+            "PUT", "/{collection_id}/{resource_id}", self.resource_handler.handle_put
+        )
+        app.router.add_route(
+            "DELETE",
+            "/{collection_id}/{resource_id}",
+            self.resource_handler.handle_delete,
         )
 
         return app
 
-    async def handle_options(self, request: web.Request) -> web.Response:
-        """Handle OPTIONS request advertising WebDAV and CalDAV capabilities.
-
-        RFC Reference:
-            - RFC 4918 Section 9.10: OPTIONS Method.
-            - RFC 4791 Section 5.1: CalDAV OPTIONS Response.
-
-        Args:
-            request: The incoming HTTP request.
-
-        Returns:
-            HTTP 200 OK response with DAV capability headers.
-        """
-        headers = {
-            "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR",
-            "DAV": "1, calendar-access",
-        }
-        return web.Response(status=200, headers=headers)
-
-    @path_args
-    async def handle_propfind_collection(
-        self, request: web.Request, collection_id: str
-    ) -> web.Response:
-        """Handle PROPFIND request for a calendar collection listing.
-
-        PROPFIND Purpose:
-            The PROPFIND method (RFC 4918 Section 9.1) acts like `ls` / `dir` + `stat`.
-            When issued against a collection path (e.g. `/work/`), it discovers collection properties
-            (verifying `DAV:resourcetype` contains `<collection/>` and `<calendar/>`) and lists child items.
-
-        Depth Header Semantics:
-            - `Depth: 0`: Returns properties for the target collection itself only.
-            - `Depth: 1` (default) or `Depth: infinity`: Returns the collection property node PLUS
-              all immediate child calendar resource nodes and their ETags (`DAV:getetag`).
-            - Why treating `infinity` as `1` is RFC-compliant: RFC 4791 Section 4.1 specifies that
-              Calendar Collections MUST NOT contain nested sub-collections. Because CalDAV calendar
-              collections are strictly flat, `Depth: 1` and `Depth: infinity` yield identical results.
-
-        RFC Reference:
-            - RFC 4918 Section 9.1: PROPFIND Method.
-            - RFC 4791 Section 4.1: Calendar Collections (non-nesting rule).
-            - RFC 4918 Section 13: Multi-Status Response.
-
-        Args:
-            request: The incoming HTTP request.
-            collection_id: Target collection identifier string.
-
-        Returns:
-            HTTP 207 Multi-Status XML response.
-        """
-        body_bytes = await request.read()
-        requested_props = parse_propfind_request(body_bytes)
-        depth = request.headers.get("Depth", "1")
-
-        root = ET.Element(qname(DAV, "multistatus"))
-
-        coll_href = f"/{collection_id}/"
-        append_propfind_response(
-            root, coll_href, is_collection=True, requested_props=requested_props
-        )
-
-        if depth != "0":
-            etags = await self.store.get_etags(collection_id)
-            for href, etag in etags.items():
-                append_propfind_response(
-                    root,
-                    href,
-                    is_collection=False,
-                    etag=etag,
-                    requested_props=requested_props,
-                )
-
-        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-        return web.Response(
-            status=207,
-            body=xml_bytes,
-            content_type="application/xml",
-            charset="utf-8",
-        )
-
-    async def handle_propfind_root(self, request: web.Request) -> web.Response:
-        """Handle PROPFIND request for root '/' autodiscovery.
-
-        RFC References:
-            - RFC 5397 Section 3: DAV:current-user-principal.
-            - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
-        """
-        body_bytes = await request.read()
-        requested_props = parse_propfind_request(body_bytes)
-
-        root = ET.Element(qname(DAV, "multistatus"))
-        append_propfind_response(
-            root, "/", is_collection=True, requested_props=requested_props
-        )
-
-        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-        return web.Response(
-            status=207,
-            body=xml_bytes,
-            content_type="application/xml",
-            charset="utf-8",
-        )
-
-    @path_args
-    async def handle_propfind_resource(
-        self, request: web.Request, collection_id: str, resource_id: str
-    ) -> web.Response:
-        """Handle PROPFIND request for a single calendar object resource stat.
-
-        PROPFIND Purpose:
-            When issued against an individual file resource (e.g. `/work/event1.ics`), PROPFIND acts
-            like a `stat` query. It allows clients to query metadata—such as checking the version
-            ETag (`DAV:getetag`) or resource type—without downloading the full `.ics` payload.
-
-        RFC Reference:
-            - RFC 4918 Section 9.1: PROPFIND Method.
-            - RFC 4918 Section 13: Multi-Status Response.
-
-        Args:
-            request: The incoming HTTP request.
-            collection_id: Target collection identifier string.
-            resource_id: Target resource filename string.
-
-        Returns:
-            HTTP 207 Multi-Status XML response or 404 Not Found if resource does not exist.
-        """
-        body_bytes = await request.read()
-        requested_props = parse_propfind_request(body_bytes)
-
-        href = f"/{collection_id}/{resource_id}"
-        resource = await self.store.get_resource(collection_id, href)
-        if not resource:
-            return web.Response(status=404, text="Resource Not Found")
-
-        root = ET.Element(qname(DAV, "multistatus"))
-        append_propfind_response(
-            root,
-            href,
-            is_collection=False,
-            etag=resource.etag,
-            requested_props=requested_props,
-        )
-
-        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-        return web.Response(
-            status=207,
-            body=xml_bytes,
-            content_type="application/xml",
-            charset="utf-8",
-        )
-
-    @path_args
-    async def handle_get(
-        self, request: web.Request, collection_id: str, resource_id: str
-    ) -> web.Response:
-        """Handle GET request to retrieve a raw calendar object resource.
-
-        RFC Reference:
-            - RFC 4791 Section 5.2.1: Fetching Calendar Object Resources.
-
-        Args:
-            request: The incoming HTTP request.
-            collection_id: Target collection identifier string.
-            resource_id: Target resource filename string.
-
-        Returns:
-            HTTP 200 OK with raw .ics payload or 404 Not Found.
-        """
-        href = f"/{collection_id}/{resource_id}"
-
-        resource = await self.store.get_resource(collection_id, href)
-        if not resource:
-            return web.Response(status=404, text="Resource Not Found")
-
-        clean_etag = resource.etag.strip('"')
-        headers = {"ETag": f'"{clean_etag}"'}
-        return web.Response(
-            status=200,
-            text=resource.ics_data,
-            content_type="text/calendar",
-            charset="utf-8",
-            headers=headers,
-        )
-
-    @path_args
-    async def handle_put(
-        self, request: web.Request, collection_id: str, resource_id: str
-    ) -> web.Response:
-        """Handle PUT request to create or replace an iCalendar object resource file.
-
-        A calendar object resource (.ics file) contains iCalendar components such as an
-        event (VEVENT), to-do task (VTODO), or journal entry (VJOURNAL). Per RFC 4791
-        Section 5.3.1, a PUT request creates or replaces the entire .ics payload stored at the
-        target path. This operation performs a complete file overwrite, not a partial update.
-
-        RFC Reference:
-            - RFC 4791 Section 5.3.1: Creating or Replacing Calendar Object Resources.
-
-        Args:
-            request: The incoming HTTP request.
-            collection_id: Target collection identifier string.
-            resource_id: Target resource filename string.
-
-        Returns:
-            HTTP 201 Created (if new) or 204 No Content (if updated) with ETag header.
-        """
-        href = f"/{collection_id}/{resource_id}"
-
-        body_bytes = await request.read()
-        ics_content = body_bytes.decode("utf-8")
-
-        # Compute deterministic SHA256 ETag
-        etag = hashlib.sha256(body_bytes).hexdigest()[:16]
-
-        existing = await self.store.get_resource(collection_id, href)
-        status = 204 if existing else 201
-
-        resource = CalendarResource(
-            href=href,
-            etag=etag,
-            ics_data=ics_content,
-        )
-        await self.store.save_resource(collection_id, resource)
-
-        headers = {"ETag": f'"{etag}"'}
-        return web.Response(status=status, headers=headers)
-
-    @path_args
-    async def handle_delete(
-        self, request: web.Request, collection_id: str, resource_id: str
-    ) -> web.Response:
-        """Handle DELETE request to remove a calendar object resource.
-
-        RFC Reference:
-            - RFC 4918 Section 9.7: DELETE Method.
-
-        Args:
-            request: The incoming HTTP request.
-            collection_id: Target collection identifier string.
-            resource_id: Target resource filename string.
-
-        Returns:
-            HTTP 204 No Content or 404 Not Found.
-        """
-        href = f"/{collection_id}/{resource_id}"
-
-        deleted = await self.store.delete_resource(collection_id, href)
-        if not deleted:
-            return web.Response(status=404, text="Resource Not Found")
-
-        return web.Response(status=204)
-
-    async def handle_well_known(self, request: web.Request) -> web.Response:
-        """Handle /.well-known/caldav discovery redirect.
-
-        RFC 6764 §5 requires CalDAV servers to redirect /.well-known/caldav
-        to the CalDAV service context path. This enables clients (Apple Calendar,
-        Thunderbird, DAVx⁵) to auto-discover the server by only knowing the hostname.
-
-        The redirect uses HTTP 301 (Moved Permanently) so clients cache the location.
-        """
-        raise web.HTTPMovedPermanently(location="/")
-
-    @path_args
-    async def handle_mkcalendar(
-        self, request: web.Request, collection_id: str
-    ) -> web.Response:
-        """Handle MKCALENDAR request to create a new calendar collection.
-
-        RFC Reference:
-            - RFC 4791 Section 5.3.1: Creating Calendar Collections.
-
-        Creates a new empty calendar collection. Returns 201 Created on success,
-        or 405 Method Not Allowed if the collection already exists.
-        """
-        if await self.store.collection_exists(collection_id):
-            return web.Response(status=405, text="Collection already exists")
-
-        await self.store.create_collection(collection_id)
-        return web.Response(status=201)
-
-    @path_args
-    async def handle_report(
-        self, request: web.Request, collection_id: str
-    ) -> web.Response:
-        """Handle REPORT request dispatching to calendar-query or calendar-multiget.
-
-        RFC Reference:
-            - RFC 3253 Section 3.6: REPORT Method.
-            - RFC 4791 Section 7.8: calendar-query REPORT.
-            - RFC 4791 Section 7.9: calendar-multiget REPORT.
-        """
-        body_bytes = await request.read()
-        if not body_bytes:
-            return web.Response(status=400, text="REPORT requires XML body")
-
-        try:
-            root = ET.fromstring(body_bytes)
-        except ET.ParseError:
-            _LOGGER.debug("Failed to parse REPORT XML body", exc_info=True)
-            return web.Response(status=400, text="Invalid XML")
-
-        root_tag = strip_ns(root.tag)
-
-        if root_tag == "calendar-query":
-            return await self._handle_calendar_query(collection_id, body_bytes)
-        elif root_tag == "calendar-multiget":
-            return await self._handle_calendar_multiget(collection_id, body_bytes)
-        else:
-            return web.Response(status=400, text=f"Unsupported REPORT type: {root_tag}")
-
-    async def _handle_calendar_query(
-        self, collection_id: str, body_bytes: bytes
-    ) -> web.Response:
-        """Evaluate a calendar-query REPORT against stored resources.
-
-        RFC Reference:
-            - RFC 4791 Section 7.8: calendar-query REPORT.
-
-        Process:
-            1. Parse the XML request to extract filter criteria.
-            2. Load all resources from the store.
-            3. Evaluate each resource against the comp-filter tree.
-            4. Build 207 Multi-Status response with matching resources.
-        """
-        query = parse_calendar_query(body_bytes)
-        all_resources = await self.store.get_resources(collection_id)
-
-        include_data = "calendar-data" in query.props
-        matched = []
-        for resource in all_resources:
-            if matches_comp_filter(resource.ics_data, query.comp_filter):
-                matched.append(
-                    ReportResource(
-                        href=resource.href,
-                        etag=resource.etag,
-                        ics_data=resource.ics_data if include_data else None,
-                    )
-                )
-
-        xml_bytes = build_report_response(matched)
-        return web.Response(
-            status=207,
-            body=xml_bytes,
-            content_type="application/xml",
-            charset="utf-8",
-        )
-
-    async def _handle_calendar_multiget(
-        self, collection_id: str, body_bytes: bytes
-    ) -> web.Response:
-        """Resolve specific resource hrefs for a calendar-multiget REPORT.
-
-        RFC Reference:
-            - RFC 4791 Section 7.9: calendar-multiget REPORT.
-
-        Process:
-            1. Parse the XML request to extract href list.
-            2. Resolve each href from the store.
-            3. Build 207 Multi-Status response with found (200) and missing (404) resources.
-        """
-        multiget = parse_calendar_multiget(body_bytes)
-        include_data = "calendar-data" in multiget.props
-
-        found = []
-        missing = []
-        for href in multiget.hrefs:
-            resource = await self.store.get_resource(collection_id, href)
-            if resource:
-                found.append(
-                    ReportResource(
-                        href=resource.href,
-                        etag=resource.etag,
-                        ics_data=resource.ics_data if include_data else None,
-                    )
-                )
-            else:
-                missing.append(href)
-
-        xml_bytes = build_report_response(found, missing_hrefs=missing)
-        return web.Response(
-            status=207,
-            body=xml_bytes,
-            content_type="application/xml",
-            charset="utf-8",
-        )
-
 
 def create_app(store: LocalStore) -> web.Application:
-    """Helper function to instantiate a CalDavRouter app for a given LocalStore.
-
-    Args:
-        store: An implementation of the LocalStore protocol.
-
-    Returns:
-        aiohttp.web.Application ready to serve requests.
-    """
+    """Helper function to instantiate a CalDavRouter app for a given LocalStore."""
     return CalDavRouter(store).create_app()
