@@ -6,6 +6,8 @@ RFC References:
   - RFC 6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage.
 """
 
+from typing import Sequence
+
 
 class CalDavError(Exception):
     """Base exception class for all icaldav client errors."""
@@ -22,7 +24,7 @@ class CalDavAuthError(CalDavError):
         self,
         url: str,
         status: int,
-        challenges: list[str] | None = None,
+        challenges: Sequence[str] | None = None,
     ) -> None:
         """Initialize CalDavAuthError with request URL, HTTP status code, and parsed challenges.
 
@@ -33,22 +35,26 @@ class CalDavAuthError(CalDavError):
         """
         self.url = url
         self.status = status
-        self.challenges = challenges or []
+        self.challenges = list(challenges) if challenges else []
 
-        schemes = self.parse_schemes()
+        schemes = self.parse_schemes(self.challenges)
         scheme_str = ", ".join(schemes) if schemes else "Unspecified"
         super().__init__(
             f"Authentication failed for {url} (HTTP {status}). Supported schemes: {scheme_str}"
         )
 
-    def parse_schemes(self) -> list[str]:
+    @staticmethod
+    def parse_schemes(challenges: Sequence[str]) -> list[str]:
         """Extract authentication scheme names (e.g. ['Basic', 'Bearer', 'Digest']) from challenges.
+
+        Args:
+            challenges: Sequence of WWW-Authenticate challenge header strings.
 
         Returns:
             List of scheme name strings in uppercase/titlecase.
         """
         schemes: list[str] = []
-        for challenge in self.challenges:
+        for challenge in challenges:
             parts = challenge.strip().split(maxsplit=1)
             if parts:
                 scheme = parts[0].title()

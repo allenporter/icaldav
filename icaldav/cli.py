@@ -55,7 +55,7 @@ import sys
 from typing import Sequence
 from aiohttp import web
 
-from icaldav.client.auth import AuthStore
+from icaldav.client.auth import AuthProfile, AuthStore
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavAuthError
 from icaldav.server.router import create_app
@@ -189,14 +189,15 @@ def run_auth(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        profile = auth_store.save_credentials(
-            url=args.url,
+        profile = AuthProfile(
+            server_url=args.url,
             username=args.username,
             password=args.password,
             token=args.token,
         )
+        saved = auth_store.save_profile(profile)
         print(
-            f"Saved credentials profile for '{profile.server_url}' ({profile.auth_type} auth)."
+            f"Saved credentials profile for '{saved.server_url}' ({saved.auth_type} auth)."
         )
     elif action == "status":
         profiles = auth_store.load_profiles()
@@ -257,10 +258,11 @@ async def run_client_async(args: argparse.Namespace) -> int:
 
     if not (token or (username and password)):
         auth_store = AuthStore()
-        s_user, s_pass, s_tok = auth_store.get_credentials(args.url)
-        username = username or s_user
-        password = password or s_pass
-        token = token or s_tok
+        saved_profile = await auth_store.async_get_profile(args.url)
+        if saved_profile:
+            username = username or saved_profile.username
+            password = password or saved_profile.password
+            token = token or saved_profile.token
 
     try:
         async with CalDavClient(

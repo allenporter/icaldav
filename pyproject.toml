@@ -14,6 +14,7 @@ requires-python = ">=3.12"
 classifiers = []
 dependencies = [
   "aiohttp>=3.10.0",
+  "mashumaro>=3.14.0",
 ]
 
 [project.urls]

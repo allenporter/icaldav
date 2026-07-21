@@ -8,30 +8,37 @@ RFC References:
   - RFC 6750: OAuth 2.0 Bearer Token Usage.
 """
 
-from dataclasses import asdict, dataclass
+import asyncio
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from mashumaro.mixins.json import DataClassJSONMixin
+
+DEFAULT_AUTH_PATH = Path.home() / ".config" / "icaldav" / "auth.json"
 
 
 @dataclass
-class AuthProfile:
+class AuthProfile(DataClassJSONMixin):
     """Dataclass storing authentication credentials for a CalDAV server host.
 
     Attributes:
         server_url: Server base URL or hostname string.
-        auth_type: Authentication scheme type ('basic' or 'bearer').
         username: Optional HTTP Basic Auth username string.
         password: Optional HTTP Basic Auth password string.
         token: Optional Bearer authentication token string.
     """
 
     server_url: str
-    auth_type: str
     username: str | None = None
     password: str | None = None
     token: str | None = None
+
+    @property
+    def auth_type(self) -> str:
+        """Dynamically computed authentication scheme type ('bearer' or 'basic')."""
+        return "bearer" if self.token else "basic"
 
 
 class AuthStore:
@@ -42,11 +49,9 @@ class AuthStore:
 
         Args:
             config_path: Custom configuration file path or None to use default
-                         (~/.config/icaldav/auth.json).
+                         (DEFAULT_AUTH_PATH).
         """
-        if config_path is None:
-            config_path = Path.home() / ".config" / "icaldav" / "auth.json"
-        self.config_path = config_path
+        self.config_path = config_path or DEFAULT_AUTH_PATH
 
     def _ensure_dir_and_permissions(self) -> None:
         """Create parent directory if missing and set 0o600 owner-only permissions on file."""
@@ -55,7 +60,7 @@ class AuthStore:
             os.chmod(self.config_path, 0o600)
 
     def load_profiles(self) -> dict[str, AuthProfile]:
-        """Load all credential profiles from auth.json.
+        """Synchronously load all credential profiles from auth.json using mashumaro.
 
         Returns:
             Dictionary mapping profile host keys to AuthProfile objects.
@@ -66,84 +71,73 @@ class AuthStore:
             raw_data = json.loads(self.config_path.read_text(encoding="utf-8"))
             profiles: dict[str, AuthProfile] = {}
             for host, data in raw_data.items():
-                profiles[host] = AuthProfile(**data)
+                profiles[host] = AuthProfile.from_dict(data)
             return profiles
         except Exception:
             return {}
 
-    def save_credentials(
-        self,
-        url: str,
-        username: str | None = None,
-        password: str | None = None,
-        token: str | None = None,
-    ) -> AuthProfile:
-        """Save credentials for a host or URL to auth.json.
+    async def async_load_profiles(self) -> dict[str, AuthProfile]:
+        """Asynchronously load all credential profiles off the main event loop thread."""
+        return await asyncio.to_thread(self.load_profiles)
+
+    def save_profile(self, profile: AuthProfile) -> AuthProfile:
+        """Synchronously save an AuthProfile for a host or URL to auth.json using mashumaro.
 
         Args:
-            url: Server URL or hostname string.
-            username: Optional HTTP Basic Auth username.
-            password: Optional HTTP Basic Auth password.
-            token: Optional Bearer authentication token.
+            profile: Target AuthProfile instance to persist.
 
         Returns:
-            The saved AuthProfile instance.
+            The persisted AuthProfile instance.
         """
         self._ensure_dir_and_permissions()
         profiles = self.load_profiles()
 
-        parsed = urlparse(url)
-        host_key = parsed.netloc if parsed.netloc else url.strip("/").lower()
+        parsed = urlparse(profile.server_url)
+        host_key = (
+            parsed.netloc if parsed.netloc else profile.server_url.strip("/").lower()
+        )
         if not host_key:
             host_key = "default"
-
-        auth_type = "bearer" if token else "basic"
-        profile = AuthProfile(
-            server_url=url,
-            auth_type=auth_type,
-            username=username,
-            password=password,
-            token=token,
-        )
 
         profiles[host_key] = profile
         profiles["default"] = profile
 
-        serialized = {k: asdict(v) for k, v in profiles.items()}
+        serialized = {k: v.to_dict() for k, v in profiles.items()}
         self.config_path.write_text(json.dumps(serialized, indent=2), encoding="utf-8")
         os.chmod(self.config_path, 0o600)
         return profile
 
-    def get_credentials(
-        self, url: str | None = None
-    ) -> tuple[str | None, str | None, str | None]:
-        """Retrieve stored credentials matching a target URL or host.
+    async def async_save_profile(self, profile: AuthProfile) -> AuthProfile:
+        """Asynchronously save an AuthProfile off the main event loop thread."""
+        return await asyncio.to_thread(self.save_profile, profile)
+
+    def get_profile(self, url: str | None = None) -> AuthProfile | None:
+        """Synchronously retrieve stored AuthProfile matching a target URL or host.
 
         Args:
             url: Target URL to match or None to fetch default profile.
 
         Returns:
-            Tuple of (username, password, token).
+            Matching AuthProfile or None if no matching profile is found.
         """
         profiles = self.load_profiles()
         if not profiles:
-            return None, None, None
+            return None
 
         if url:
             parsed = urlparse(url)
             host_key = parsed.netloc if parsed.netloc else url.strip("/").lower()
             if host_key in profiles:
-                p = profiles[host_key]
-                return p.username, p.password, p.token
+                return profiles[host_key]
 
-        if "default" in profiles:
-            p = profiles["default"]
-            return p.username, p.password, p.token
+        return profiles.get("default")
 
-        return None, None, None
+    async def async_get_profile(self, url: str | None = None) -> AuthProfile | None:
+        """Asynchronously retrieve stored AuthProfile off the main event loop thread."""
+        return await asyncio.to_thread(self.get_profile, url)
 
     def clear_credentials(self) -> bool:
-        """Delete stored auth.json configuration file.
+        """Synchronously delete stored auth.json configuration file.
 
         Returns:
             True if file existed and was removed, False otherwise.
@@ -152,3 +146,7 @@ class AuthStore:
             self.config_path.unlink()
             return True
         return False
+
+    async def async_clear_credentials(self) -> bool:
+        """Asynchronously delete stored auth.json configuration file."""
+        return await asyncio.to_thread(self.clear_credentials)

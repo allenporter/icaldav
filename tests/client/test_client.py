@@ -49,4 +49,4 @@ async def test_client_auth_error_challenge_parsing() -> None:
                 assert err.status == 401
                 assert err.url == url
                 assert len(err.challenges) > 0
-                assert "Basic" in err.parse_schemes()
+                assert "Basic" in err.parse_schemes(err.challenges)
