@@ -5,10 +5,11 @@ import xml.etree.ElementTree as ET
 import pytest
 from syrupy.assertion import SnapshotAssertion
 
-from icaldav.xml.namespaces import strip_ns
+from icaldav.xml.namespaces import CALDAV, DAV, strip_ns
 from icaldav.xml.propfind import (
     build_propfind_xml,
     parse_multistatus_xml,
+    parse_propfind_request,
 )
 
 
@@ -47,6 +48,34 @@ def test_build_propfind_xml(snapshot: SnapshotAssertion) -> None:
     """Test generating <d:propfind> XML payload bytes against snapshot."""
     xml_bytes = build_propfind_xml(["resourcetype", "getetag", "displayname"])
     assert xml_bytes.decode("utf-8") == snapshot
+
+
+def test_parse_propfind_request() -> None:
+    """Test parsing PROPFIND request XML bodies."""
+    # Empty / no body
+    assert parse_propfind_request(b"") is None
+
+    # <allprop/> body
+    allprop_xml = (
+        b'<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:allprop/></d:propfind>'
+    )
+    assert parse_propfind_request(allprop_xml) is None
+
+    # <prop> body with DAV and CalDAV properties
+    prop_xml = b"""<?xml version="1.0"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+    <d:prop>
+        <d:resourcetype/>
+        <d:owner/>
+        <c:calendar-home-set/>
+    </d:prop>
+</d:propfind>"""
+    parsed = parse_propfind_request(prop_xml)
+    assert parsed == [
+        (DAV, "resourcetype"),
+        (DAV, "owner"),
+        (CALDAV, "calendar-home-set"),
+    ]
 
 
 def test_parse_multistatus_xml(snapshot: SnapshotAssertion) -> None:

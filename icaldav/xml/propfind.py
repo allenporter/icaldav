@@ -23,7 +23,14 @@ import logging
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
+from icaldav.xml.namespaces import (
+    CALDAV,
+    DAV,
+    CalDavProp,
+    DavProp,
+    qname,
+    strip_ns,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,7 +112,7 @@ def build_propfind_xml(props: Sequence[str] | None = None) -> bytes:
     Returns:
         Encoded UTF-8 XML byte string.
     """
-    root = ET.Element(qname(DAV, "propfind"), attrib={"xmlns:d": DAV})
+    root = ET.Element(qname(DAV, "propfind"))
 
     if not props:
         ET.SubElement(root, qname(DAV, "allprop"))
@@ -119,6 +126,47 @@ def build_propfind_xml(props: Sequence[str] | None = None) -> bytes:
                 ET.SubElement(prop_elem, qname(DAV, prop_name))
 
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def parse_propfind_request(xml_bytes: bytes) -> list[tuple[str, str]] | None:
+    """Parse a <DAV:propfind> XML request body to extract requested property names.
+
+    RFC Reference:
+        - RFC 4918 Section 9.1: PROPFIND Method.
+        - RFC 4918 Section 14.20: DAV:propfind Element.
+
+    Args:
+        xml_bytes: Raw XML request byte payload.
+
+    Returns:
+        A list of (namespace, local_tag) tuples if explicit properties were requested in <DAV:prop>,
+        or None if <DAV:allprop/>, <DAV:propname/>, or no body was supplied.
+    """
+    if not xml_bytes or not xml_bytes.strip():
+        return None
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        _LOGGER.debug("Failed to parse PROPFIND request XML", exc_info=True)
+        return None
+
+    if strip_ns(root.tag) != "propfind":
+        return None
+
+    for child in root:
+        if strip_ns(child.tag) == "prop":
+            props: list[tuple[str, str]] = []
+            for prop in child:
+                tag = prop.tag
+                if tag.startswith("{") and "}" in tag:
+                    ns_part, local_tag = tag[1:].split("}", 1)
+                    props.append((ns_part, local_tag))
+                else:
+                    props.append((DAV, tag))
+            return props
+
+    return None
 
 
 def parse_multistatus_xml(xml_bytes: bytes) -> list[PropfindItem]:
@@ -209,3 +257,117 @@ def parse_multistatus_xml(xml_bytes: bytes) -> list[PropfindItem]:
             items.append(PropfindItem(href=href, propstats=propstats))
 
     return items
+
+
+def create_property_element(
+    ns: str,
+    tag: str,
+    href: str,
+    is_collection: bool,
+    etag: str | None = None,
+) -> ET.Element | None:
+    """Construct an XML property Element if supported, or return None if unsupported.
+
+    RFC References:
+        - RFC 4918 Section 14.24: DAV:resourcetype and DAV:displayname.
+        - RFC 4918 Section 14.19: DAV:getetag.
+        - RFC 5397 Section 3: DAV:current-user-principal.
+        - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
+    """
+    if ns == DAV and tag == DavProp.RESOURCETYPE:
+        rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
+        if is_collection:
+            ET.SubElement(rt, qname(DAV, "collection"))
+            ET.SubElement(rt, qname(CALDAV, "calendar"))
+        return rt
+
+    if ns == DAV and tag == DavProp.GETETAG:
+        if etag:
+            etag_elem = ET.Element(qname(DAV, DavProp.GETETAG))
+            clean_etag = etag.strip('"')
+            etag_elem.text = f'"{clean_etag}"'
+            return etag_elem
+        return None
+
+    if ns == DAV and tag == DavProp.CURRENT_USER_PRINCIPAL:
+        cup = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRINCIPAL))
+        href_elem = ET.SubElement(cup, qname(DAV, "href"))
+        href_elem.text = "/principals/user/"
+        return cup
+
+    if ns == CALDAV and tag == CalDavProp.CALENDAR_HOME_SET:
+        chs = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_HOME_SET))
+        href_elem = ET.SubElement(chs, qname(DAV, "href"))
+        href_elem.text = "/"
+        return chs
+
+    if ns == DAV and tag == DavProp.DISPLAYNAME:
+        dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
+        dn.text = href.strip("/").split("/")[-1] or "Calendar"
+        return dn
+
+    return None
+
+
+def append_propfind_response(
+    root: ET.Element,
+    href: str,
+    is_collection: bool,
+    etag: str | None = None,
+    requested_props: list[tuple[str, str]] | None = None,
+) -> None:
+    """Append a single <DAV:response> element to a <DAV:multistatus> root XML element.
+
+    RFC References:
+        - RFC 4918 Section 9.1 & 14.22: 200 OK and 404 Not Found propstat status groups.
+        - RFC 5397 Section 3: DAV:current-user-principal.
+        - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
+    """
+    resp = ET.SubElement(root, qname(DAV, "response"))
+    href_elem = ET.SubElement(resp, qname(DAV, "href"))
+    href_elem.text = href
+
+    if requested_props is None:
+        default_props = [
+            (DAV, DavProp.RESOURCETYPE),
+            (DAV, DavProp.CURRENT_USER_PRINCIPAL),
+            (CALDAV, CalDavProp.CALENDAR_HOME_SET),
+        ]
+        if etag:
+            default_props.append((DAV, DavProp.GETETAG))
+
+        propstat = ET.SubElement(resp, qname(DAV, "propstat"))
+        prop = ET.SubElement(propstat, qname(DAV, "prop"))
+        for ns, tag in default_props:
+            elem = create_property_element(ns, tag, href, is_collection, etag)
+            if elem is not None:
+                prop.append(elem)
+
+        status = ET.SubElement(propstat, qname(DAV, "status"))
+        status.text = "HTTP/1.1 200 OK"
+    else:
+        supported_elems: list[ET.Element] = []
+        unsupported_elems: list[ET.Element] = []
+
+        for ns, tag in requested_props:
+            elem = create_property_element(ns, tag, href, is_collection, etag)
+            if elem is not None:
+                supported_elems.append(elem)
+            else:
+                unsupported_elems.append(ET.Element(qname(ns, tag)))
+
+        if supported_elems:
+            propstat_200 = ET.SubElement(resp, qname(DAV, "propstat"))
+            prop_200 = ET.SubElement(propstat_200, qname(DAV, "prop"))
+            for elem in supported_elems:
+                prop_200.append(elem)
+            status_200 = ET.SubElement(propstat_200, qname(DAV, "status"))
+            status_200.text = "HTTP/1.1 200 OK"
+
+        if unsupported_elems:
+            propstat_404 = ET.SubElement(resp, qname(DAV, "propstat"))
+            prop_404 = ET.SubElement(propstat_404, qname(DAV, "prop"))
+            for elem in unsupported_elems:
+                prop_404.append(elem)
+            status_404 = ET.SubElement(propstat_404, qname(DAV, "status"))
+            status_404.text = "HTTP/1.1 404 Not Found"

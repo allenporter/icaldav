@@ -17,7 +17,8 @@ from aiohttp import web
 
 from icaldav.filter import matches_comp_filter
 from icaldav.store.types import CalendarResource, LocalStore
-from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
+from icaldav.xml.namespaces import DAV, qname, strip_ns
+from icaldav.xml.propfind import append_propfind_response, parse_propfind_request
 from icaldav.xml.report import (
     ReportResource,
     build_report_response,
@@ -64,8 +65,9 @@ class CalDavRouter:
         """
         app = web.Application(client_max_size=2 * 1024 * 1024)  # 2MB limit
 
-        # Well-known CalDAV discovery (RFC 6764 §5)
+        # Well-known & Root CalDAV discovery (RFC 6764 §5, RFC 5397 §3)
         app.router.add_route("GET", "/.well-known/caldav", self.handle_well_known)
+        app.router.add_route("PROPFIND", "/", self.handle_propfind_root)
 
         # Collection & Resource Routes
         app.router.add_route("OPTIONS", "/{tail:.*}", self.handle_options)
@@ -137,20 +139,50 @@ class CalDavRouter:
         Returns:
             HTTP 207 Multi-Status XML response.
         """
+        body_bytes = await request.read()
+        requested_props = parse_propfind_request(body_bytes)
         depth = request.headers.get("Depth", "1")
 
-        root = ET.Element(
-            qname(DAV, "multistatus"),
-            attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
-        )
+        root = ET.Element(qname(DAV, "multistatus"))
 
         coll_href = f"/{collection_id}/"
-        self._append_response_node(root, coll_href, is_collection=True)
+        append_propfind_response(
+            root, coll_href, is_collection=True, requested_props=requested_props
+        )
 
         if depth != "0":
             etags = await self.store.get_etags(collection_id)
             for href, etag in etags.items():
-                self._append_response_node(root, href, is_collection=False, etag=etag)
+                append_propfind_response(
+                    root,
+                    href,
+                    is_collection=False,
+                    etag=etag,
+                    requested_props=requested_props,
+                )
+
+        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
+
+    async def handle_propfind_root(self, request: web.Request) -> web.Response:
+        """Handle PROPFIND request for root '/' autodiscovery.
+
+        RFC References:
+            - RFC 5397 Section 3: DAV:current-user-principal.
+            - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
+        """
+        body_bytes = await request.read()
+        requested_props = parse_propfind_request(body_bytes)
+
+        root = ET.Element(qname(DAV, "multistatus"))
+        append_propfind_response(
+            root, "/", is_collection=True, requested_props=requested_props
+        )
 
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         return web.Response(
@@ -183,16 +215,22 @@ class CalDavRouter:
         Returns:
             HTTP 207 Multi-Status XML response or 404 Not Found if resource does not exist.
         """
+        body_bytes = await request.read()
+        requested_props = parse_propfind_request(body_bytes)
+
         href = f"/{collection_id}/{resource_id}"
         resource = await self.store.get_resource(collection_id, href)
         if not resource:
             return web.Response(status=404, text="Resource Not Found")
 
-        root = ET.Element(
-            qname(DAV, "multistatus"),
-            attrib={"xmlns:d": DAV, "xmlns:c": CALDAV},
+        root = ET.Element(qname(DAV, "multistatus"))
+        append_propfind_response(
+            root,
+            href,
+            is_collection=False,
+            etag=resource.etag,
+            requested_props=requested_props,
         )
-        self._append_response_node(root, href, is_collection=False, etag=resource.etag)
 
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         return web.Response(
@@ -201,43 +239,6 @@ class CalDavRouter:
             content_type="application/xml",
             charset="utf-8",
         )
-
-    def _append_response_node(
-        self,
-        root: ET.Element,
-        href: str,
-        is_collection: bool,
-        etag: str | None = None,
-    ) -> None:
-        """Append a single <DAV:response> element to a <DAV:multistatus> root XML element.
-
-        Appends a response node containing the resource's `href` and a `<DAV:propstat>`
-        element grouping its properties under status `HTTP/1.1 200 OK`.
-
-        Args:
-            root: Parent `<DAV:multistatus>` ElementTree node.
-            href: Relative URI path of the resource or collection.
-            is_collection: True if this node represents a calendar collection folder.
-            etag: Optional entity tag string for file resources.
-        """
-        resp = ET.SubElement(root, qname(DAV, "response"))
-        href_elem = ET.SubElement(resp, qname(DAV, "href"))
-        href_elem.text = href
-
-        propstat = ET.SubElement(resp, qname(DAV, "propstat"))
-        prop = ET.SubElement(propstat, qname(DAV, "prop"))
-
-        rt = ET.SubElement(prop, qname(DAV, "resourcetype"))
-        if is_collection:
-            ET.SubElement(rt, qname(DAV, "collection"))
-            ET.SubElement(rt, qname(CALDAV, "calendar"))
-        elif etag:
-            etag_elem = ET.SubElement(prop, qname(DAV, "getetag"))
-            clean_etag = etag.strip('"')
-            etag_elem.text = f'"{clean_etag}"'
-
-        status = ET.SubElement(propstat, qname(DAV, "status"))
-        status.text = "HTTP/1.1 200 OK"
 
     @path_args
     async def handle_get(

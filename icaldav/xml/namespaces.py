@@ -21,8 +21,30 @@ RFC References:
   - RFC 4791 Section 3: CalDAV XML Namespaces (Namespace: urn:ietf:params:xml:ns:caldav).
 """
 
+from enum import StrEnum
+import xml.etree.ElementTree as ET
+
 DAV = "DAV:"
 CALDAV = "urn:ietf:params:xml:ns:caldav"
+
+ET.register_namespace("d", DAV)
+ET.register_namespace("c", CALDAV)
+
+
+class DavProp(StrEnum):
+    """Standard WebDAV property local tag names (RFC 4918, RFC 5397)."""
+
+    RESOURCETYPE = "resourcetype"
+    GETETAG = "getetag"
+    DISPLAYNAME = "displayname"
+    CURRENT_USER_PRINCIPAL = "current-user-principal"
+
+
+class CalDavProp(StrEnum):
+    """Standard CalDAV property local tag names (RFC 4791)."""
+
+    CALENDAR_HOME_SET = "calendar-home-set"
+    CALENDAR_DATA = "calendar-data"
 
 
 def qname(ns: str, tag: str) -> str:
