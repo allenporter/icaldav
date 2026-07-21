@@ -68,3 +68,30 @@ async def test_auth_store_save_and_retrieve(tmp_path: Path) -> None:
     # 8. Clear credentials
     assert await auth_store.clear_credentials() is True
     assert config_file.exists() is False
+
+    # 9. Clear credentials when file already deleted returns False
+    assert await auth_store.clear_credentials() is False
+
+
+@pytest.mark.asyncio
+async def test_auth_store_corrupted_json(tmp_path: Path) -> None:
+    """Test loading profiles from corrupted auth.json returns empty dict gracefully."""
+    config_file = tmp_path / "auth.json"
+    config_file.write_text("{ invalid json payload }", encoding="utf-8")
+    auth_store = AuthStore(config_file)
+
+    profiles = await auth_store.load_profiles()
+    assert profiles == {}
+
+
+@pytest.mark.asyncio
+async def test_auth_store_empty_url(tmp_path: Path) -> None:
+    """Test saving profile with empty server_url falls back to default key."""
+    config_file = tmp_path / "auth.json"
+    auth_store = AuthStore(config_file)
+
+    p = AuthProfile(server_url="", username="bob")
+    await auth_store.save_profile(p)
+    retrieved = await auth_store.get_profile()
+    assert retrieved is not None
+    assert retrieved.username == "bob"
