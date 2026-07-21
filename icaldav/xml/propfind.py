@@ -19,10 +19,13 @@ RFC References:
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+import logging
 from typing import Any
 import xml.etree.ElementTree as ET
 
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -147,7 +150,11 @@ def parse_multistatus_xml(xml_bytes: bytes) -> list[PropfindItem]:
     if not xml_bytes or not xml_bytes.strip():
         return []
 
-    root = ET.fromstring(xml_bytes)
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        _LOGGER.debug("Failed to parse XML response", exc_info=True)
+        return []
     items: list[PropfindItem] = []
 
     for resp_elem in root:

@@ -1,5 +1,8 @@
 """Unit tests for PROPFIND XML generation and multi-status parsing using syrupy snapshot testing."""
 
+import xml.etree.ElementTree as ET
+
+import pytest
 from syrupy.assertion import SnapshotAssertion
 
 from icaldav.xml.namespaces import strip_ns
@@ -7,6 +10,30 @@ from icaldav.xml.propfind import (
     build_propfind_xml,
     parse_multistatus_xml,
 )
+
+
+# Billion Laughs (exponential entity expansion) attack payload.
+# Each level expands 10x, so &lol9; would expand to ~10^9 "lol" strings
+# (~3GB) from a few hundred bytes of input.
+BILLION_LAUGHS_XML = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+  <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+  <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+  <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+  <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+  <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+  <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+]>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>&lol9;</d:href>
+  </d:response>
+</d:multistatus>
+"""
 
 
 def test_strip_ns() -> None:
@@ -53,3 +80,24 @@ def test_parse_multistatus_xml(snapshot: SnapshotAssertion) -> None:
 """
     items = parse_multistatus_xml(sample_xml)
     assert items == snapshot
+
+
+def test_billion_laughs_rejected_by_parser() -> None:
+    """Verify that Python's expat (>=2.4.1) rejects the Billion Laughs entity expansion bomb.
+
+    This is a regression test ensuring the XML parser raises an error
+    rather than consuming unbounded memory. Python >=3.11 bundles expat
+    >=2.4.1 which blocks exponential entity expansion natively.
+    """
+    with pytest.raises(ET.ParseError):
+        ET.fromstring(BILLION_LAUGHS_XML)
+
+
+def test_parse_multistatus_billion_laughs_returns_empty() -> None:
+    """Verify parse_multistatus_xml gracefully handles a Billion Laughs payload.
+
+    The function should return an empty list rather than crash or hang,
+    since the underlying ET.fromstring will reject the malicious XML.
+    """
+    items = parse_multistatus_xml(BILLION_LAUGHS_XML)
+    assert items == []
