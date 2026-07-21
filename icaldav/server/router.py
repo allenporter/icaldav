@@ -261,13 +261,12 @@ class CalDavRouter:
     async def handle_put(
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
-        """Handle PUT request to create or replace an entire calendar object resource file.
+        """Handle PUT request to create or replace an iCalendar object resource file.
 
-        PUT Operation Scope:
-            Per RFC 4791 Section 5.3.1, a PUT request creates or replaces the ENTIRE calendar object
-            resource (`.ics` payload) stored at the target `resource_id` path. This document can
-            represent an event (`VEVENT`), a to-do task (`VTODO`), or a journal entry (`VJOURNAL`).
-            This operation is a complete payload overwrite, not a partial field or UID update.
+        A calendar object resource (.ics file) contains iCalendar components such as an
+        event (VEVENT), to-do task (VTODO), or journal entry (VJOURNAL). Per RFC 4791
+        Section 5.3.1, a PUT request creates or replaces the entire .ics payload stored at the
+        target path. This operation performs a complete file overwrite, not a partial update.
 
         RFC Reference:
             - RFC 4791 Section 5.3.1: Creating or Replacing Calendar Object Resources.
