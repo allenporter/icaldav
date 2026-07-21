@@ -18,7 +18,7 @@ from icaldav.store.types import CalendarResource, LocalStore
 from icaldav.xml.namespaces import CALDAV, DAV, qname
 
 
-def unpack_path_args(
+def path_args(
     func: Callable[..., Coroutine[Any, Any, web.Response]],
 ) -> Callable[..., Coroutine[Any, Any, web.Response]]:
     """Decorator unpacking request.match_info directly into handler keyword arguments."""
@@ -87,7 +87,7 @@ class CalDavRouter:
         }
         return web.Response(status=200, headers=headers)
 
-    @unpack_path_args
+    @path_args
     async def handle_propfind(
         self,
         request: web.Request,
@@ -170,7 +170,7 @@ class CalDavRouter:
         status = ET.SubElement(propstat, qname(DAV, "status"))
         status.text = "HTTP/1.1 200 OK"
 
-    @unpack_path_args
+    @path_args
     async def handle_get(
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
@@ -203,7 +203,7 @@ class CalDavRouter:
             headers=headers,
         )
 
-    @unpack_path_args
+    @path_args
     async def handle_put(
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
@@ -241,7 +241,7 @@ class CalDavRouter:
         headers = {"ETag": f'"{etag}"'}
         return web.Response(status=status, headers=headers)
 
-    @unpack_path_args
+    @path_args
     async def handle_delete(
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
