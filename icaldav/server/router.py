@@ -68,10 +68,7 @@ class CalDavRouter:
 
         return app
 
-    @path_args
-    async def handle_options(
-        self, request: web.Request, tail: str = ""
-    ) -> web.Response:
+    async def handle_options(self, request: web.Request) -> web.Response:
         """Handle OPTIONS request advertising WebDAV and CalDAV capabilities.
 
         RFC Reference:
@@ -80,7 +77,6 @@ class CalDavRouter:
 
         Args:
             request: The incoming HTTP request.
-            tail: Optional URI tail path parameter matched by wildcards.
 
         Returns:
             HTTP 200 OK response with DAV capability headers.
