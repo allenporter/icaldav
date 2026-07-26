@@ -56,9 +56,13 @@ import sys
 from typing import Sequence
 from aiohttp import web
 
+import webbrowser
+
 from icaldav.client.auth import AuthProfile, AuthStore
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavAuthError
+from icaldav.client.negotiator import AuthNegotiator
+from icaldav.client.oauth import OAuthConfig, OAuthSession
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
 
@@ -93,6 +97,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     auth_subparsers.add_parser("status", help="Display saved authentication profiles")
     auth_subparsers.add_parser("logout", help="Clear all stored credentials")
+
+    probe_parser = auth_subparsers.add_parser(
+        "probe",
+        help="Probe a CalDAV server URL and discover supported authentication methods",
+    )
+    probe_parser.add_argument("url", help="CalDAV server URL to probe")
+
+    oauth_parser = auth_subparsers.add_parser(
+        "oauth", help="Authenticate with a CalDAV server using OAuth 2.0 browser flow"
+    )
+    oauth_parser.add_argument("url", help="CalDAV server URL to authenticate against")
+    oauth_parser.add_argument("--client-id", required=True, help="OAuth 2.0 client ID")
+    oauth_parser.add_argument(
+        "--client-secret", required=True, help="OAuth 2.0 client secret"
+    )
+    oauth_parser.add_argument(
+        "--port", type=int, default=8088, help="Local callback port (default: 8088)"
+    )
 
     # 2. serve
     serve_parser = subparsers.add_parser(
@@ -238,6 +260,99 @@ async def run_auth_async(args: argparse.Namespace) -> int:
             print("Successfully cleared all stored credentials.")
         else:
             print("No stored credentials found to clear.")
+    elif action == "probe":
+        negotiator = AuthNegotiator()
+        print(f"Probing {args.url} ...")
+        try:
+            methods = await negotiator.probe(args.url)
+            print(f"Discovered {len(methods)} authentication method(s):")
+            for method in methods:
+                if method.oauth_config:
+                    print(f"  - {method.scheme} (realm: {method.realm or 'N/A'})")
+                    print(f"    Auth URI:  {method.oauth_config.auth_uri}")
+                    print(f"    Token URI: {method.oauth_config.token_uri}")
+                else:
+                    print(f"  - {method.scheme} (realm: {method.realm or 'N/A'})")
+        except Exception as err:
+            print(f"Error probing {args.url}: {err}", file=sys.stderr)
+            return 1
+    elif action == "oauth":
+        # 1. Probe to discover OAuth config
+        negotiator = AuthNegotiator()
+        print(f"Probing {args.url} for OAuth endpoints...")
+        try:
+            methods = await negotiator.probe(args.url)
+        except Exception as err:
+            print(f"Error probing {args.url}: {err}", file=sys.stderr)
+            return 1
+
+        # Find an OAuth method
+        oauth_method = next(
+            (m for m in methods if m.scheme == "oauth" and m.oauth_config), None
+        )
+        if not oauth_method or not oauth_method.oauth_config:
+            print(
+                "Error: No OAuth endpoint discovered for this server.", file=sys.stderr
+            )
+            print(
+                "Discovered methods: " + ", ".join(m.scheme for m in methods),
+                file=sys.stderr,
+            )
+            return 1
+
+        # 2. Configure OAuth with discovered endpoints + user's credentials
+        config = OAuthConfig(
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            auth_uri=oauth_method.oauth_config.auth_uri,
+            token_uri=oauth_method.oauth_config.token_uri,
+            redirect_uri=f"http://localhost:{args.port}",
+            scopes=oauth_method.oauth_config.scopes
+            or ["https://www.googleapis.com/auth/calendar"],
+        )
+
+        # 3. Build auth URL with PKCE and open browser
+        auth_url, code_verifier = OAuthSession.authorize_url(config)
+        print("\nOpening browser for authorization...")
+        print(f"If the browser doesn't open, visit:\n  {auth_url}\n")
+        webbrowser.open(auth_url)
+
+        # 4. Receive authorization code via temporary callback listener
+        print(f"Waiting for OAuth callback on http://localhost:{args.port} ...")
+        try:
+            code = await OAuthSession.fetch_code_from_callback(port=args.port)
+        except asyncio.TimeoutError:
+            print("Error: OAuth callback timed out after 5 minutes.", file=sys.stderr)
+            return 1
+        except Exception as err:
+            print(f"Error receiving authorization code: {err}", file=sys.stderr)
+            return 1
+
+        # 5. Exchange code for tokens
+        print("Exchanging authorization code for tokens...")
+        try:
+            token = await OAuthSession.exchange_code(config, code, code_verifier)
+        except Exception as err:
+            print(f"Error exchanging code: {err}", file=sys.stderr)
+            return 1
+
+        # 6. Save to auth store
+        profile = AuthProfile(
+            server_url=args.url,
+            token=token.access_token,
+            client_id=args.client_id,
+            client_secret=args.client_secret,
+            refresh_token=token.refresh_token,
+            token_uri=config.token_uri,
+            token_expires_at=token.expires_at,
+        )
+        auth_store = AuthStore()
+        await auth_store.save_profile(profile)
+        print(
+            f"\nSuccessfully authenticated! OAuth credentials saved for '{args.url}'."
+        )
+        if token.refresh_token:
+            print("Refresh token stored \u2014 access token will auto-refresh.")
     else:
         print("Error: Missing auth action. Use --help for usage.", file=sys.stderr)
         return 1
@@ -293,18 +408,20 @@ async def run_client_async(args: argparse.Namespace) -> int:
     password = getattr(args, "password", None) or os.environ.get("ICALDAV_PASSWORD")
     token = getattr(args, "token", None) or os.environ.get("ICALDAV_TOKEN")
 
-    if not (token or (username and password)):
+    auth_profile: AuthProfile | None = None
+    if token or (username and password):
+        auth_profile = AuthProfile(
+            server_url=args.url,
+            username=username,
+            password=password,
+            token=token,
+        )
+    else:
         auth_store = AuthStore()
-        saved_profile = await auth_store.get_profile(args.url)
-        if saved_profile:
-            username = username or saved_profile.username
-            password = password or saved_profile.password
-            token = token or saved_profile.token
+        auth_profile = await auth_store.get_profile(args.url)
 
     try:
-        async with CalDavClient(
-            username=username, password=password, token=token
-        ) as client:
+        async with CalDavClient(auth_profile=auth_profile) as client:
             if action == "propfind":
                 items = await client.propfind(args.url, depth=args.depth)
                 print(f"PROPFIND Response for {args.url} (Depth: {args.depth}):")
