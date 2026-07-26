@@ -32,19 +32,35 @@ ET.register_namespace("c", CALDAV)
 
 
 class DavProp(StrEnum):
-    """Standard WebDAV property local tag names (RFC 4918, RFC 5397)."""
+    """Standard WebDAV property local tag names (RFC 4918, RFC 5397, RFC 3744)."""
 
     RESOURCETYPE = "resourcetype"
+    """Identifies resource entity type (e.g. collection, calendar). RFC 4918 §14.24."""
+
     GETETAG = "getetag"
+    """Entity tag for cache control and optimistic concurrency diffing. RFC 4918 §14.19."""
+
     DISPLAYNAME = "displayname"
+    """Human-readable display name of a collection or resource. RFC 4918 §14.11."""
+
     CURRENT_USER_PRINCIPAL = "current-user-principal"
+    """Principal URL identifying the currently authenticated user. RFC 5397 §3."""
+
+    PRINCIPAL_URL = "principal-URL"
+    """Canonical principal URL for WebDAV access control verification. RFC 3744 §4.2."""
 
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""
 
     CALENDAR_HOME_SET = "calendar-home-set"
+    """Base directory URL where a user's calendar collections reside. RFC 4791 §6.2.1."""
+
     CALENDAR_DATA = "calendar-data"
+    """Raw iCalendar (.ics) text payload content. RFC 4791 §9.6."""
+
+    CALENDAR_USER_ADDRESS_SET = "calendar-user-address-set"
+    """Calendar email addresses (mailto:...) identifying the user for scheduling. RFC 4791 §6.2.2."""
 
 
 def qname(ns: str, tag: str) -> str:

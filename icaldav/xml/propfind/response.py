@@ -20,7 +20,10 @@ from icaldav.xml.namespaces import (
 )
 from icaldav.xml.propfind.models import PropfindItem, Propstat
 
+from icaldav.store.principal import PrincipalInfo, SingleUserPrincipalStore
+
 _LOGGER = logging.getLogger(__name__)
+_DEFAULT_PRINCIPAL = SingleUserPrincipalStore()._principal
 
 
 def create_property_element(
@@ -29,6 +32,7 @@ def create_property_element(
     href: str,
     is_collection: bool,
     etag: str | None = None,
+    principal: PrincipalInfo | None = None,
 ) -> ET.Element | None:
     """Construct an XML property Element if supported, or return None if unsupported.
 
@@ -37,7 +41,11 @@ def create_property_element(
         - RFC 4918 Section 14.19: DAV:getetag.
         - RFC 5397 Section 3: DAV:current-user-principal.
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
+        - RFC 3744 Section 4.2: DAV:principal-URL.
+        - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
     """
+    p_info = principal or _DEFAULT_PRINCIPAL
+
     if ns == DAV and tag == DavProp.RESOURCETYPE:
         rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
         if is_collection:
@@ -56,14 +64,26 @@ def create_property_element(
     if ns == DAV and tag == DavProp.CURRENT_USER_PRINCIPAL:
         cup = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRINCIPAL))
         href_elem = ET.SubElement(cup, qname(DAV, "href"))
-        href_elem.text = "/principals/user/"
+        href_elem.text = p_info.principal_path
         return cup
+
+    if ns == DAV and tag == DavProp.PRINCIPAL_URL:
+        purl = ET.Element(qname(DAV, DavProp.PRINCIPAL_URL))
+        href_elem = ET.SubElement(purl, qname(DAV, "href"))
+        href_elem.text = p_info.principal_path
+        return purl
 
     if ns == CALDAV and tag == CalDavProp.CALENDAR_HOME_SET:
         chs = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_HOME_SET))
         href_elem = ET.SubElement(chs, qname(DAV, "href"))
-        href_elem.text = "/"
+        href_elem.text = p_info.calendar_home_path
         return chs
+
+    if ns == CALDAV and tag == CalDavProp.CALENDAR_USER_ADDRESS_SET:
+        cuas = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET))
+        href_elem = ET.SubElement(cuas, qname(DAV, "href"))
+        href_elem.text = p_info.email
+        return cuas
 
     if ns == DAV and tag == DavProp.DISPLAYNAME:
         dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
@@ -79,6 +99,7 @@ def append_propfind_response(
     is_collection: bool,
     etag: str | None = None,
     requested_props: list[tuple[str, str]] | None = None,
+    principal: PrincipalInfo | None = None,
 ) -> None:
     """Append a single <DAV:response> element to a <DAV:multistatus> root XML element.
 
@@ -103,7 +124,9 @@ def append_propfind_response(
         propstat = ET.SubElement(resp, qname(DAV, "propstat"))
         prop = ET.SubElement(propstat, qname(DAV, "prop"))
         for ns, tag in default_props:
-            elem = create_property_element(ns, tag, href, is_collection, etag)
+            elem = create_property_element(
+                ns, tag, href, is_collection, etag, principal=principal
+            )
             if elem is not None:
                 prop.append(elem)
 
@@ -114,7 +137,9 @@ def append_propfind_response(
         unsupported_elems: list[ET.Element] = []
 
         for ns, tag in requested_props:
-            elem = create_property_element(ns, tag, href, is_collection, etag)
+            elem = create_property_element(
+                ns, tag, href, is_collection, etag, principal=principal
+            )
             if elem is not None:
                 supported_elems.append(elem)
             else:
