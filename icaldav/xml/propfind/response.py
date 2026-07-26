@@ -10,6 +10,7 @@ import logging
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from icaldav.store.principal import InMemoryPrincipalStore, PrincipalInfo
 from icaldav.xml.namespaces import (
     CALDAV,
     DAV,
@@ -18,19 +19,43 @@ from icaldav.xml.namespaces import (
     qname,
     strip_ns,
 )
-from icaldav.xml.propfind.models import PropfindItem, Propstat
-
-from icaldav.store.principal import InMemoryPrincipalStore, PrincipalInfo
+from icaldav.xml.propfind.models import (
+    PropfindItem,
+    Propstat,
+    ResourceKind,
+    ResourceTarget,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _DEFAULT_PRINCIPAL = InMemoryPrincipalStore()._principals["user"]
 
 
+def _build_href_property(ns: str, tag: str, href_val: str) -> ET.Element:
+    """Helper to construct an XML element wrapping a <DAV:href> child element."""
+    elem = ET.Element(qname(ns, tag))
+    ET.SubElement(elem, qname(DAV, "href")).text = href_val
+    return elem
+
+
+def _build_resourcetype_property(kind: ResourceKind) -> ET.Element:
+    """Helper to construct a <DAV:resourcetype> XML element based on ResourceKind."""
+    rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
+    if kind == ResourceKind.PRINCIPAL:
+        ET.SubElement(rt, qname(DAV, "collection"))
+        ET.SubElement(rt, qname(DAV, DavProp.PRINCIPAL))
+    elif kind == ResourceKind.ROOT:
+        ET.SubElement(rt, qname(DAV, "collection"))
+    elif kind == ResourceKind.CALENDAR:
+        ET.SubElement(rt, qname(DAV, "collection"))
+        ET.SubElement(rt, qname(CALDAV, "calendar"))
+    return rt
+
+
 def create_property_element(
     ns: str,
     tag: str,
-    href: str,
-    is_collection: bool,
+    href: str | ResourceTarget,
+    is_collection: bool = False,
     etag: str | None = None,
     principal: PrincipalInfo | None = None,
 ) -> ET.Element | None:
@@ -43,78 +68,105 @@ def create_property_element(
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
         - RFC 3744 Section 4.2: DAV:principal-URL.
         - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
+        - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
     """
-    p_info = principal or _DEFAULT_PRINCIPAL
+    if isinstance(href, ResourceTarget):
+        target = href
+    else:
+        clean_h = href.strip()
+        if clean_h.startswith("/principals/"):
+            r_kind = ResourceKind.PRINCIPAL
+        elif not is_collection:
+            r_kind = ResourceKind.RESOURCE
+        elif clean_h.rstrip("/") == "":
+            r_kind = ResourceKind.ROOT
+        else:
+            r_kind = ResourceKind.CALENDAR
+        target = ResourceTarget(
+            href=href,
+            kind=r_kind,
+            etag=etag,
+            principal=principal,
+        )
 
-    if ns == DAV and tag == DavProp.RESOURCETYPE:
-        rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
-        if href.startswith("/principals/"):
-            ET.SubElement(rt, qname(DAV, "collection"))
-            ET.SubElement(rt, qname(DAV, DavProp.PRINCIPAL))
-        elif is_collection:
-            ET.SubElement(rt, qname(DAV, "collection"))
-            if href.rstrip("/") != "":
-                ET.SubElement(rt, qname(CALDAV, "calendar"))
-        return rt
+    p_info = target.principal or principal or _DEFAULT_PRINCIPAL
 
-    if ns == DAV and tag == DavProp.GETETAG:
-        if etag:
-            etag_elem = ET.Element(qname(DAV, DavProp.GETETAG))
-            clean_etag = etag.strip('"')
-            etag_elem.text = f'"{clean_etag}"'
-            return etag_elem
-        return None
+    if ns == DAV:
+        if tag == DavProp.RESOURCETYPE:
+            return _build_resourcetype_property(target.kind)
 
-    if ns == DAV and tag == DavProp.CURRENT_USER_PRINCIPAL:
-        cup = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRINCIPAL))
-        href_elem = ET.SubElement(cup, qname(DAV, "href"))
-        href_elem.text = p_info.principal_path
-        return cup
+        if tag == DavProp.GETETAG:
+            target_etag = target.etag or etag
+            if target_etag:
+                etag_elem = ET.Element(qname(DAV, DavProp.GETETAG))
+                etag_elem.text = f'"{target_etag.strip('"')}"'
+                return etag_elem
+            return None
 
-    if ns == DAV and tag == DavProp.PRINCIPAL_URL:
-        purl = ET.Element(qname(DAV, DavProp.PRINCIPAL_URL))
-        href_elem = ET.SubElement(purl, qname(DAV, "href"))
-        href_elem.text = p_info.principal_path
-        return purl
-
-    if ns == CALDAV and tag == CalDavProp.CALENDAR_HOME_SET:
-        chs = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_HOME_SET))
-        href_elem = ET.SubElement(chs, qname(DAV, "href"))
-        href_elem.text = p_info.calendar_home_path
-        return chs
-
-    if ns == CALDAV and tag == CalDavProp.CALENDAR_USER_ADDRESS_SET:
-        cuas = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET))
-        href_elem = ET.SubElement(cuas, qname(DAV, "href"))
-        href_elem.text = p_info.email
-        return cuas
-
-    if ns == CALDAV and tag == CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET:
-        if (
-            is_collection
-            and href.rstrip("/") != ""
-            and not href.startswith("/principals/")
-        ):
-            sccs = ET.Element(
-                qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET)
+        if tag == DavProp.CURRENT_USER_PRINCIPAL:
+            return _build_href_property(
+                DAV, DavProp.CURRENT_USER_PRINCIPAL, p_info.principal_path
             )
-            for comp in ("VEVENT", "VTODO", "VJOURNAL"):
-                ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
-            return sccs
-        return None
 
-    if ns == DAV and tag == DavProp.DISPLAYNAME:
-        dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
-        dn.text = href.strip("/").split("/")[-1] or "Calendar"
-        return dn
+        if tag == DavProp.PRINCIPAL_URL:
+            return _build_href_property(
+                DAV, DavProp.PRINCIPAL_URL, p_info.principal_path
+            )
+
+        if tag == DavProp.DISPLAYNAME:
+            dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
+            display_text = (
+                target.displayname
+                or target.href.strip("/").split("/")[-1]
+                or "Calendar"
+            )
+            dn.text = display_text
+            return dn
+
+    elif ns == CALDAV:
+        if tag == CalDavProp.CALENDAR_HOME_SET:
+            return _build_href_property(
+                CALDAV, CalDavProp.CALENDAR_HOME_SET, p_info.calendar_home_path
+            )
+
+        if tag == CalDavProp.CALENDAR_USER_ADDRESS_SET:
+            return _build_href_property(
+                CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET, p_info.email
+            )
+
+        if tag == CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET:
+            if target.kind == ResourceKind.CALENDAR:
+                sccs = ET.Element(
+                    qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET)
+                )
+                for comp in ("VEVENT", "VTODO", "VJOURNAL"):
+                    ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
+                return sccs
+            return None
 
     return None
 
 
+def _append_propstat(
+    resp: ET.Element,
+    elements: list[ET.Element],
+    status_text: str,
+) -> None:
+    """Helper to append a <DAV:propstat> XML block to a <DAV:response> element."""
+    if not elements:
+        return
+    propstat = ET.SubElement(resp, qname(DAV, "propstat"))
+    prop = ET.SubElement(propstat, qname(DAV, "prop"))
+    for elem in elements:
+        prop.append(elem)
+    status = ET.SubElement(propstat, qname(DAV, "status"))
+    status.text = status_text
+
+
 def append_propfind_response(
     root: ET.Element,
-    href: str,
-    is_collection: bool,
+    href: str | ResourceTarget,
+    is_collection: bool = False,
     etag: str | None = None,
     requested_props: list[tuple[str, str]] | None = None,
     principal: PrincipalInfo | None = None,
@@ -127,9 +179,27 @@ def append_propfind_response(
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
     """
+    if isinstance(href, ResourceTarget):
+        target = href
+    else:
+        clean_h = href.strip()
+        if clean_h.startswith("/principals/"):
+            r_kind = ResourceKind.PRINCIPAL
+        elif not is_collection:
+            r_kind = ResourceKind.RESOURCE
+        elif clean_h.rstrip("/") == "":
+            r_kind = ResourceKind.ROOT
+        else:
+            r_kind = ResourceKind.CALENDAR
+        target = ResourceTarget(
+            href=href,
+            kind=r_kind,
+            etag=etag,
+            principal=principal,
+        )
+
     resp = ET.SubElement(root, qname(DAV, "response"))
-    href_elem = ET.SubElement(resp, qname(DAV, "href"))
-    href_elem.text = href
+    ET.SubElement(resp, qname(DAV, "href")).text = target.href
 
     if requested_props is None:
         default_props = [
@@ -138,54 +208,30 @@ def append_propfind_response(
             (DAV, DavProp.CURRENT_USER_PRINCIPAL),
             (CALDAV, CalDavProp.CALENDAR_HOME_SET),
         ]
-        if (
-            is_collection
-            and href.rstrip("/") != ""
-            and not href.startswith("/principals/")
-        ):
+        if target.kind == ResourceKind.CALENDAR:
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
-        if etag:
+        if target.etag or etag:
             default_props.append((DAV, DavProp.GETETAG))
 
-        propstat = ET.SubElement(resp, qname(DAV, "propstat"))
-        prop = ET.SubElement(propstat, qname(DAV, "prop"))
-        for ns, tag in default_props:
-            elem = create_property_element(
-                ns, tag, href, is_collection, etag, principal=principal
-            )
-            if elem is not None:
-                prop.append(elem)
-
-        status = ET.SubElement(propstat, qname(DAV, "status"))
-        status.text = "HTTP/1.1 200 OK"
+        supported_elems = [
+            elem
+            for ns, tag in default_props
+            if (elem := create_property_element(ns, tag, target)) is not None
+        ]
+        _append_propstat(resp, supported_elems, "HTTP/1.1 200 OK")
     else:
         supported_elems: list[ET.Element] = []
         unsupported_elems: list[ET.Element] = []
 
         for ns, tag in requested_props:
-            elem = create_property_element(
-                ns, tag, href, is_collection, etag, principal=principal
-            )
+            elem = create_property_element(ns, tag, target)
             if elem is not None:
                 supported_elems.append(elem)
             else:
                 unsupported_elems.append(ET.Element(qname(ns, tag)))
 
-        if supported_elems:
-            propstat_200 = ET.SubElement(resp, qname(DAV, "propstat"))
-            prop_200 = ET.SubElement(propstat_200, qname(DAV, "prop"))
-            for elem in supported_elems:
-                prop_200.append(elem)
-            status_200 = ET.SubElement(propstat_200, qname(DAV, "status"))
-            status_200.text = "HTTP/1.1 200 OK"
-
-        if unsupported_elems:
-            propstat_404 = ET.SubElement(resp, qname(DAV, "propstat"))
-            prop_404 = ET.SubElement(propstat_404, qname(DAV, "prop"))
-            for elem in unsupported_elems:
-                prop_404.append(elem)
-            status_404 = ET.SubElement(propstat_404, qname(DAV, "status"))
-            status_404.text = "HTTP/1.1 404 Not Found"
+        _append_propstat(resp, supported_elems, "HTTP/1.1 200 OK")
+        _append_propstat(resp, unsupported_elems, "HTTP/1.1 404 Not Found")
 
 
 def parse_multistatus_xml(xml_bytes: bytes) -> list[PropfindItem]:
