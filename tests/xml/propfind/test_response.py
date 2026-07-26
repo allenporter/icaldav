@@ -5,7 +5,12 @@ import xml.etree.ElementTree as ET
 import pytest
 from syrupy.assertion import SnapshotAssertion
 
-from icaldav.xml.propfind.response import parse_multistatus_xml
+from icaldav.xml.namespaces import CALDAV, DAV, CalDavProp, DavProp, strip_ns
+from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
+from icaldav.xml.propfind.response import (
+    create_property_element,
+    parse_multistatus_xml,
+)
 
 # Billion Laughs (exponential entity expansion) attack payload.
 BILLION_LAUGHS_XML = b"""\
@@ -97,10 +102,6 @@ def test_parse_multistatus_xml_edge_cases() -> None:
 
 def test_create_property_element_supported_components() -> None:
     """Test create_property_element for supported-calendar-component-set."""
-    from icaldav.xml.namespaces import CALDAV, CalDavProp
-    from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
-    from icaldav.xml.propfind.response import create_property_element
-
     cal_target = ResourceTarget(href="/work/", kind=ResourceKind.CALENDAR)
     sccs = create_property_element(
         CALDAV,
@@ -123,10 +124,6 @@ def test_create_property_element_supported_components() -> None:
 
 def test_create_property_element_resourcetype_variants() -> None:
     """Test resourcetype generation for principal, root, and calendar collections."""
-    from icaldav.xml.namespaces import DAV, DavProp, strip_ns
-    from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
-    from icaldav.xml.propfind.response import create_property_element
-
     # Principal resource -> <collection/><principal/>
     p_target = ResourceTarget(href="/principals/user/", kind=ResourceKind.PRINCIPAL)
     p_rt = create_property_element(DAV, DavProp.RESOURCETYPE, p_target)
