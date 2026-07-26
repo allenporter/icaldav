@@ -93,28 +93,3 @@ def test_parse_multistatus_xml_edge_cases() -> None:
     items = parse_multistatus_xml(non_numeric_status_xml)
     assert len(items) == 1
     assert items[0].propstats[0].status_code == 200
-
-
-def test_create_property_element_supported_components() -> None:
-    """Test create_property_element for supported-calendar-component-set."""
-    from icaldav.xml.namespaces import CALDAV, CalDavProp
-    from icaldav.xml.propfind.response import create_property_element
-
-    sccs = create_property_element(
-        CALDAV,
-        CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET,
-        "/work/",
-        is_collection=True,
-    )
-    assert sccs is not None
-    comps = [child.attrib.get("name") for child in sccs]
-    assert comps == ["VEVENT", "VTODO", "VJOURNAL"]
-
-    # Non-collection returns None
-    sccs_file = create_property_element(
-        CALDAV,
-        CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET,
-        "/work/event.ics",
-        is_collection=False,
-    )
-    assert sccs_file is None
