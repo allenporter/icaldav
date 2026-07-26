@@ -53,24 +53,28 @@ def create_property_element(
             return etag_elem
         return None
 
+    # TODO(multi-user): Replace static '/principals/user/' default with dynamic principal URL from authenticated session context.
     if ns == DAV and tag == DavProp.CURRENT_USER_PRINCIPAL:
         cup = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRINCIPAL))
         href_elem = ET.SubElement(cup, qname(DAV, "href"))
         href_elem.text = "/principals/user/"
         return cup
 
+    # TODO(multi-user): Replace static '/principals/user/' default with canonical user principal URL.
     if ns == DAV and tag == DavProp.PRINCIPAL_URL:
         purl = ET.Element(qname(DAV, DavProp.PRINCIPAL_URL))
         href_elem = ET.SubElement(purl, qname(DAV, "href"))
         href_elem.text = "/principals/user/"
         return purl
 
+    # TODO(multi-user): Replace static '/' default with user-scoped calendar home path (e.g. '/{user}/').
     if ns == CALDAV and tag == CalDavProp.CALENDAR_HOME_SET:
         chs = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_HOME_SET))
         href_elem = ET.SubElement(chs, qname(DAV, "href"))
         href_elem.text = "/"
         return chs
 
+    # TODO(multi-user): Replace static 'mailto:user@localhost' default with user account email address.
     if ns == CALDAV and tag == CalDavProp.CALENDAR_USER_ADDRESS_SET:
         cuas = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET))
         href_elem = ET.SubElement(cuas, qname(DAV, "href"))

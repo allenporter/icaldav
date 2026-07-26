@@ -20,6 +20,7 @@ These are required for Apple Calendar, Thunderbird, and DAVx⁵ to discover and 
 - [ ] **Collection-level ETag** — Radicale returns ETags on collections for quick "has anything changed?" checks
 - [ ] **`CALDAV:supported-calendar-component-set`** — advertise supported component types (VEVENT, VTODO, VJOURNAL)
 - [ ] **Server auth middleware** — optional Basic Auth for multi-user setups
+- [ ] **Dynamic Multi-User Principal & Home-Set Resolution** — replace single-user default URLs (`/principals/user/`, `/`, `mailto:user@localhost`) with session-derived user paths once multi-user auth/store is integrated
 - [ ] **`Content-Security-Policy` header** — `default-src 'self'; object-src 'none'`
 
 ## Nice-to-Have: Advanced Sync
