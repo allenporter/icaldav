@@ -20,3 +20,12 @@ async def test_router_create_app() -> None:
         assert resp.status == 200
         assert "PROPFIND" in resp.headers["Allow"]
         assert "calendar-access" in resp.headers["DAV"]
+
+        resp_slash = await client.options("/work/")
+        assert resp_slash.status == 200
+
+        propfind_resp = await client.request("PROPFIND", "/work/")
+        assert propfind_resp.status == 207
+
+        report_resp = await client.request("REPORT", "/work/", data=b"invalid body")
+        assert report_resp.status == 400
