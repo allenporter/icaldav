@@ -26,9 +26,11 @@ import xml.etree.ElementTree as ET
 
 DAV = "DAV:"
 CALDAV = "urn:ietf:params:xml:ns:caldav"
+CALSERVER = "http://calendarserver.org/ns/"
 
 ET.register_namespace("d", DAV)
 ET.register_namespace("c", CALDAV)
+ET.register_namespace("cs", CALSERVER)
 
 
 class DavProp(StrEnum):
@@ -52,6 +54,9 @@ class DavProp(StrEnum):
     PRINCIPAL = "principal"
     """Identifies resource entity as a WebDAV Principal. RFC 3744 §4.1."""
 
+    OWNER = "owner"
+    """Principal URL owning the target resource. RFC 3744 §5.1."""
+
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""
@@ -67,6 +72,13 @@ class CalDavProp(StrEnum):
 
     SUPPORTED_CALENDAR_COMPONENT_SET = "supported-calendar-component-set"
     """Supported iCalendar component types (VEVENT, VTODO, VJOURNAL) for calendar collections. RFC 4791 §5.2.3."""
+
+
+class CalServerProp(StrEnum):
+    """Apple CalendarServer extension property local tag names."""
+
+    GETCTAG = "getctag"
+    """Collection change tag URI for fast client sync diffing."""
 
 
 DEFAULT_SUPPORTED_COMPONENTS = ("VEVENT", "VTODO", "VJOURNAL")
