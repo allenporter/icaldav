@@ -93,3 +93,35 @@ def test_parse_multistatus_xml_edge_cases() -> None:
     items = parse_multistatus_xml(non_numeric_status_xml)
     assert len(items) == 1
     assert items[0].propstats[0].status_code == 200
+
+
+def test_create_property_element_discovery() -> None:
+    """Test create_property_element for WebDAV/CalDAV discovery properties."""
+    from icaldav.xml.namespaces import CALDAV, DAV, CalDavProp, DavProp
+    from icaldav.xml.propfind.response import create_property_element
+
+    cup = create_property_element(
+        DAV, DavProp.CURRENT_USER_PRINCIPAL, "/", is_collection=True
+    )
+    assert cup is not None
+    cup_href = cup.find("{DAV:}href")
+    assert cup_href is not None and cup_href.text == "/principals/user/"
+
+    purl = create_property_element(DAV, DavProp.PRINCIPAL_URL, "/", is_collection=True)
+    assert purl is not None
+    purl_href = purl.find("{DAV:}href")
+    assert purl_href is not None and purl_href.text == "/principals/user/"
+
+    chs = create_property_element(
+        CALDAV, CalDavProp.CALENDAR_HOME_SET, "/", is_collection=True
+    )
+    assert chs is not None
+    chs_href = chs.find("{DAV:}href")
+    assert chs_href is not None and chs_href.text == "/"
+
+    cuas = create_property_element(
+        CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET, "/", is_collection=True
+    )
+    assert cuas is not None
+    cuas_href = cuas.find("{DAV:}href")
+    assert cuas_href is not None and cuas_href.text == "mailto:user@localhost"

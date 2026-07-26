@@ -47,6 +47,9 @@ class CalDavRouter:
         app.router.add_route("GET", "/.well-known/caldav", handle_well_known)
         app.router.add_route("OPTIONS", "/{tail:.*}", handle_options)
         app.router.add_route("PROPFIND", "/", self.propfind_handler.handle_root)
+        app.router.add_route(
+            "PROPFIND", "/principals/{tail:.*}", self.propfind_handler.handle_root
+        )
 
         # Collections
         app.router.add_route(

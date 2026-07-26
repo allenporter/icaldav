@@ -59,11 +59,23 @@ def create_property_element(
         href_elem.text = "/principals/user/"
         return cup
 
+    if ns == DAV and tag == DavProp.PRINCIPAL_URL:
+        purl = ET.Element(qname(DAV, DavProp.PRINCIPAL_URL))
+        href_elem = ET.SubElement(purl, qname(DAV, "href"))
+        href_elem.text = "/principals/user/"
+        return purl
+
     if ns == CALDAV and tag == CalDavProp.CALENDAR_HOME_SET:
         chs = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_HOME_SET))
         href_elem = ET.SubElement(chs, qname(DAV, "href"))
         href_elem.text = "/"
         return chs
+
+    if ns == CALDAV and tag == CalDavProp.CALENDAR_USER_ADDRESS_SET:
+        cuas = ET.Element(qname(CALDAV, CalDavProp.CALENDAR_USER_ADDRESS_SET))
+        href_elem = ET.SubElement(cuas, qname(DAV, "href"))
+        href_elem.text = "mailto:user@localhost"
+        return cuas
 
     if ns == DAV and tag == DavProp.DISPLAYNAME:
         dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))

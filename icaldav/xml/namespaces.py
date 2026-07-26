@@ -32,12 +32,13 @@ ET.register_namespace("c", CALDAV)
 
 
 class DavProp(StrEnum):
-    """Standard WebDAV property local tag names (RFC 4918, RFC 5397)."""
+    """Standard WebDAV property local tag names (RFC 4918, RFC 5397, RFC 3744)."""
 
     RESOURCETYPE = "resourcetype"
     GETETAG = "getetag"
     DISPLAYNAME = "displayname"
     CURRENT_USER_PRINCIPAL = "current-user-principal"
+    PRINCIPAL_URL = "principal-URL"
 
 
 class CalDavProp(StrEnum):
@@ -45,6 +46,7 @@ class CalDavProp(StrEnum):
 
     CALENDAR_HOME_SET = "calendar-home-set"
     CALENDAR_DATA = "calendar-data"
+    CALENDAR_USER_ADDRESS_SET = "calendar-user-address-set"
 
 
 def qname(ns: str, tag: str) -> str:
