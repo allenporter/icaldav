@@ -48,9 +48,13 @@ def create_property_element(
 
     if ns == DAV and tag == DavProp.RESOURCETYPE:
         rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
-        if is_collection:
+        if href.startswith("/principals/"):
             ET.SubElement(rt, qname(DAV, "collection"))
-            ET.SubElement(rt, qname(CALDAV, "calendar"))
+            ET.SubElement(rt, qname(DAV, DavProp.PRINCIPAL))
+        elif is_collection:
+            ET.SubElement(rt, qname(DAV, "collection"))
+            if href.rstrip("/") != "":
+                ET.SubElement(rt, qname(CALDAV, "calendar"))
         return rt
 
     if ns == DAV and tag == DavProp.GETETAG:
@@ -86,7 +90,11 @@ def create_property_element(
         return cuas
 
     if ns == CALDAV and tag == CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET:
-        if is_collection:
+        if (
+            is_collection
+            and href.rstrip("/") != ""
+            and not href.startswith("/principals/")
+        ):
             sccs = ET.Element(
                 qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET)
             )
@@ -130,7 +138,11 @@ def append_propfind_response(
             (DAV, DavProp.CURRENT_USER_PRINCIPAL),
             (CALDAV, CalDavProp.CALENDAR_HOME_SET),
         ]
-        if is_collection:
+        if (
+            is_collection
+            and href.rstrip("/") != ""
+            and not href.startswith("/principals/")
+        ):
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
         if etag:
             default_props.append((DAV, DavProp.GETETAG))

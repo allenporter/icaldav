@@ -49,6 +49,9 @@ class DavProp(StrEnum):
     PRINCIPAL_URL = "principal-URL"
     """Canonical principal URL for WebDAV access control verification. RFC 3744 §4.2."""
 
+    PRINCIPAL = "principal"
+    """Identifies resource entity as a WebDAV Principal. RFC 3744 §4.1."""
+
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""

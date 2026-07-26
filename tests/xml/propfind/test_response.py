@@ -118,3 +118,31 @@ def test_create_property_element_supported_components() -> None:
         is_collection=False,
     )
     assert sccs_file is None
+
+
+def test_create_property_element_resourcetype_variants() -> None:
+    """Test resourcetype generation for principal, root, and calendar collections."""
+    from icaldav.xml.namespaces import DAV, DavProp, strip_ns
+    from icaldav.xml.propfind.response import create_property_element
+
+    # Principal resource -> <collection/><principal/>
+    p_rt = create_property_element(
+        DAV, DavProp.RESOURCETYPE, "/principals/user/", is_collection=True
+    )
+    assert p_rt is not None
+    p_tags = [strip_ns(child.tag) for child in p_rt]
+    assert p_tags == ["collection", "principal"]
+
+    # Root collection -> <collection/>
+    r_rt = create_property_element(DAV, DavProp.RESOURCETYPE, "/", is_collection=True)
+    assert r_rt is not None
+    r_tags = [strip_ns(child.tag) for child in r_rt]
+    assert r_tags == ["collection"]
+
+    # Calendar collection -> <collection/><calendar/>
+    c_rt = create_property_element(
+        DAV, DavProp.RESOURCETYPE, "/work/", is_collection=True
+    )
+    assert c_rt is not None
+    c_tags = [strip_ns(child.tag) for child in c_rt]
+    assert c_tags == ["collection", "calendar"]
