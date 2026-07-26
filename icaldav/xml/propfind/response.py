@@ -13,9 +13,11 @@ import xml.etree.ElementTree as ET
 from icaldav.store.principal import InMemoryPrincipalStore
 from icaldav.xml.namespaces import (
     CALDAV,
+    CALSERVER,
     DAV,
     DEFAULT_SUPPORTED_COMPONENTS,
     CalDavProp,
+    CalServerProp,
     DavProp,
     qname,
     strip_ns,
@@ -65,6 +67,7 @@ def create_property_element(
         - RFC 5397 Section 3: DAV:current-user-principal.
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
         - RFC 3744 Section 4.2: DAV:principal-URL.
+        - RFC 3744 Section 5.1: DAV:owner.
         - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
     """
@@ -90,6 +93,9 @@ def create_property_element(
             return _build_href_property(
                 DAV, DavProp.PRINCIPAL_URL, p_info.principal_path
             )
+
+        if tag == DavProp.OWNER:
+            return _build_href_property(DAV, DavProp.OWNER, p_info.principal_path)
 
         if tag == DavProp.DISPLAYNAME:
             dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
@@ -120,6 +126,15 @@ def create_property_element(
                 for comp in DEFAULT_SUPPORTED_COMPONENTS:
                     ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
                 return sccs
+            return None
+
+    elif ns == CALSERVER:
+        if tag == CalServerProp.GETCTAG:
+            if target.kind == ResourceKind.CALENDAR:
+                ctag_val = target.ctag or f'"ctag-{abs(hash(target.href))}"'
+                ctag_elem = ET.Element(qname(CALSERVER, CalServerProp.GETCTAG))
+                ctag_elem.text = ctag_val
+                return ctag_elem
             return None
 
     return None
@@ -161,11 +176,13 @@ def append_propfind_response(
         default_props = [
             (DAV, DavProp.RESOURCETYPE),
             (DAV, DavProp.DISPLAYNAME),
+            (DAV, DavProp.OWNER),
             (DAV, DavProp.CURRENT_USER_PRINCIPAL),
             (CALDAV, CalDavProp.CALENDAR_HOME_SET),
         ]
         if target.kind == ResourceKind.CALENDAR:
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
+            default_props.append((CALSERVER, CalServerProp.GETCTAG))
         if target.etag:
             default_props.append((DAV, DavProp.GETETAG))
 

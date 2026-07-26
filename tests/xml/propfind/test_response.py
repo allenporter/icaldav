@@ -5,7 +5,16 @@ import xml.etree.ElementTree as ET
 import pytest
 from syrupy.assertion import SnapshotAssertion
 
-from icaldav.xml.namespaces import CALDAV, DAV, CalDavProp, DavProp, strip_ns
+from icaldav.store.principal import PrincipalInfo
+from icaldav.xml.namespaces import (
+    CALDAV,
+    CALSERVER,
+    DAV,
+    CalDavProp,
+    CalServerProp,
+    DavProp,
+    strip_ns,
+)
 from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.response import (
     create_property_element,
@@ -144,3 +153,29 @@ def test_create_property_element_resourcetype_variants() -> None:
     assert c_rt is not None
     c_tags = [strip_ns(child.tag) for child in c_rt]
     assert c_tags == ["collection", "calendar"]
+
+
+def test_create_property_element_owner_and_getctag() -> None:
+    """Test DAV:owner and CALSERVER:getctag property generation."""
+    bernard = PrincipalInfo(
+        user_id="bernard",
+        principal_path="/principals/users/bernard/",
+        calendar_home_path="/calendars/bernard/",
+        email="mailto:bernard@example.com",
+    )
+    target = ResourceTarget(
+        href="/work/",
+        kind=ResourceKind.CALENDAR,
+        ctag='"ctag-abc"',
+        principal=bernard,
+    )
+
+    owner_elem = create_property_element(DAV, DavProp.OWNER, target)
+    assert owner_elem is not None
+    owner_href = owner_elem.find(f"{{{DAV}}}href")
+    assert owner_href is not None
+    assert owner_href.text == "/principals/users/bernard/"
+
+    ctag_elem = create_property_element(CALSERVER, CalServerProp.GETCTAG, target)
+    assert ctag_elem is not None
+    assert ctag_elem.text == '"ctag-abc"'

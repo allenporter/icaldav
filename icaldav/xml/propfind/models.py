@@ -37,6 +37,7 @@ class ResourceTarget:
         kind: Explicit ResourceKind classification provided directly by the handler.
         displayname: Optional human-readable display name string.
         etag: Optional entity tag string for cache control.
+        ctag: Optional collection change tag string for fast client sync diffing.
         principal: Optional PrincipalInfo metadata object for WebDAV autodiscovery properties.
     """
 
@@ -44,6 +45,7 @@ class ResourceTarget:
     kind: ResourceKind
     displayname: str | None = None
     etag: str | None = None
+    ctag: str | None = None
     principal: PrincipalInfo | None = None
 
 
