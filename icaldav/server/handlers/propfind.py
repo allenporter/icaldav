@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args
+from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import DAV, qname
 from icaldav.xml.propfind.request import parse_propfind_request
@@ -18,17 +19,27 @@ from icaldav.xml.propfind.response import append_propfind_response
 class PropfindHandler:
     """Handler for WebDAV PROPFIND method queries."""
 
-    def __init__(self, store: LocalStore) -> None:
+    def __init__(
+        self,
+        store: LocalStore,
+        principal_store: PrincipalStore | None = None,
+    ) -> None:
         self.store = store
+        self.principal_store = principal_store or InMemoryPrincipalStore()
 
     async def handle_root(self, request: web.Request) -> web.Response:
         """Handle PROPFIND request for root '/' autodiscovery."""
         body_bytes = await request.read()
         requested_props = parse_propfind_request(body_bytes)
+        principal = await self.principal_store.get_principal(request.get("user"))
 
         root = ET.Element(qname(DAV, "multistatus"))
         append_propfind_response(
-            root, "/", is_collection=True, requested_props=requested_props
+            root,
+            "/",
+            is_collection=True,
+            requested_props=requested_props,
+            principal=principal,
         )
 
         xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -47,12 +58,17 @@ class PropfindHandler:
         body_bytes = await request.read()
         requested_props = parse_propfind_request(body_bytes)
         depth = request.headers.get("Depth", "1")
+        principal = await self.principal_store.get_principal(request.get("user"))
 
         root = ET.Element(qname(DAV, "multistatus"))
 
         coll_href = f"/{collection_id}/"
         append_propfind_response(
-            root, coll_href, is_collection=True, requested_props=requested_props
+            root,
+            coll_href,
+            is_collection=True,
+            requested_props=requested_props,
+            principal=principal,
         )
 
         if depth != "0":

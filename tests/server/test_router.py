@@ -29,3 +29,26 @@ async def test_router_create_app() -> None:
 
         report_resp = await client.request("REPORT", "/work/", data=b"invalid body")
         assert report_resp.status == 400
+
+
+@pytest.mark.asyncio
+async def test_router_with_custom_principal_store() -> None:
+    """Test CalDavRouter with custom PrincipalStore integration."""
+    from icaldav.store.principal import InMemoryPrincipalStore
+
+    store = MemoryStore()
+    p_store = InMemoryPrincipalStore.create_single_user(
+        user_id="custom",
+        principal_path="/principals/custom/",
+        calendar_home_path="/custom_home/",
+        email="mailto:custom@example.com",
+    )
+    router = CalDavRouter(store, principal_store=p_store)
+    app = router.create_app()
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.request("PROPFIND", "/")
+        assert resp.status == 207
+        body = await resp.text()
+        assert "/principals/custom/" in body
+        assert "/custom_home/" in body

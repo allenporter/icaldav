@@ -4,12 +4,14 @@ Feature gaps identified by comparing CalDavRouter against Radicale via live prot
 
 ## Must-Have: Real Client Compatibility
 
-These are required for Apple Calendar, Thunderbird, and DAVx⁵ to discover and sync with our server.
+These are required for Apple Calendar, Thunderbird, DAVx⁵, and test tools to discover and sync with our server.
 
 - [x] **Honest DAV compliance header** — stop advertising `DAV: 2` (locking) and `access-control` that we don't implement; only advertise `1, calendar-access`
 - [x] **`/.well-known/caldav` redirect** — 301 redirect to root (RFC 6764 §5); without this, clients can't auto-discover our server
-- [x] **MKCALENDAR method** — create calendar collections (RFC 4791 §5.3.1); currently returns 405
-- [x] **Principal discovery properties** — return `DAV:current-user-principal` and `CALDAV:calendar-home-set` in PROPFIND responses (RFC 5397 §3, RFC 4791 §6.2.1)
+- [x] **MKCALENDAR method** — create calendar collections (RFC 4791 §5.3.1)
+- [x] **Trailing slash route normalization** — accept both `/collection` and `/collection/` routes in `CalDavRouter`
+- [x] **Principal discovery properties & `/principals/` routing** — return `DAV:current-user-principal`, `DAV:principal-URL`, `CALDAV:calendar-home-set`, and `CALDAV:calendar-user-address-set` in PROPFIND responses (RFC 5397 §3, RFC 4791 §6.2.1, RFC 3744 §4.2)
+- [x] **PrincipalStore & PrincipalInfo scaffolding** — abstract principal metadata resolution (`PrincipalInfo`, `PrincipalStore`, `InMemoryPrincipalStore`) for router and XML response generation
 - [x] **REPORT method: calendar-query** — filter events by component type, date range, etc. (RFC 4791 §7.8); this is how real clients fetch events efficiently
 - [x] **REPORT method: calendar-multiget** — batch-fetch multiple resources by href (RFC 4791 §7.9); used by clients after PROPFIND to bulk-download changed events
 - [x] **404 propstat for unsupported properties** — when a client requests properties we don't have (e.g. `displayname` on a resource), return them grouped under a `404` propstat block instead of silently omitting them (RFC 4918 §9.1)
@@ -19,7 +21,8 @@ These are required for Apple Calendar, Thunderbird, and DAVx⁵ to discover and 
 - [ ] **`displayname` property on collections** — return collection display name in PROPFIND
 - [ ] **Collection-level ETag** — Radicale returns ETags on collections for quick "has anything changed?" checks
 - [ ] **`CALDAV:supported-calendar-component-set`** — advertise supported component types (VEVENT, VTODO, VJOURNAL)
-- [ ] **Server auth middleware** — optional Basic Auth for multi-user setups
+- [ ] **Server auth middleware** — optional Basic Auth / OAuth token validation for multi-user setups
+- [ ] **Persistent Multi-User PrincipalStore** — user database / directory backend for `PrincipalStore` returning dynamic user-scoped principal metadata
 - [ ] **`Content-Security-Policy` header** — `default-src 'self'; object-src 'none'`
 
 ## Nice-to-Have: Advanced Sync
