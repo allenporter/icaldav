@@ -57,6 +57,9 @@ class DavProp(StrEnum):
     OWNER = "owner"
     """Principal URL owning the target resource. RFC 3744 §5.1."""
 
+    CURRENT_USER_PRIVILEGE_SET = "current-user-privilege-set"
+    """Privileges granted to the authenticated user on this resource. RFC 3744 §5.3."""
+
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""
@@ -72,6 +75,9 @@ class CalDavProp(StrEnum):
 
     SUPPORTED_CALENDAR_COMPONENT_SET = "supported-calendar-component-set"
     """Supported iCalendar component types (VEVENT, VTODO, VJOURNAL) for calendar collections. RFC 4791 §5.2.3."""
+
+    MAX_RESOURCE_SIZE = "max-resource-size"
+    """Maximum single resource payload size in bytes supported by calendar collection. RFC 4791 §5.2.5."""
 
 
 class CalServerProp(StrEnum):

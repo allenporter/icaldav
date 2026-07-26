@@ -54,6 +54,15 @@ def _build_resourcetype_property(kind: ResourceKind) -> ET.Element:
     return rt
 
 
+def _build_current_user_privilege_set_property() -> ET.Element:
+    """Helper constructing <DAV:current-user-privilege-set> for full read/write access. RFC 3744 §5.3."""
+    cups = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRIVILEGE_SET))
+    priv = ET.SubElement(cups, qname(DAV, "privilege"))
+    for p_name in ("read", "write", "write-properties", "write-content", "all"):
+        ET.SubElement(priv, qname(DAV, p_name))
+    return cups
+
+
 def create_property_element(
     ns: str,
     tag: str,
@@ -68,8 +77,10 @@ def create_property_element(
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
         - RFC 3744 Section 4.2: DAV:principal-URL.
         - RFC 3744 Section 5.1: DAV:owner.
+        - RFC 3744 Section 5.3: DAV:current-user-privilege-set.
         - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
+        - RFC 4791 Section 5.2.5: CALDAV:max-resource-size.
     """
     p_info = target.principal or _DEFAULT_PRINCIPAL
 
@@ -96,6 +107,9 @@ def create_property_element(
 
         if tag == DavProp.OWNER:
             return _build_href_property(DAV, DavProp.OWNER, p_info.principal_path)
+
+        if tag == DavProp.CURRENT_USER_PRIVILEGE_SET:
+            return _build_current_user_privilege_set_property()
 
         if tag == DavProp.DISPLAYNAME:
             dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
@@ -126,6 +140,13 @@ def create_property_element(
                 for comp in DEFAULT_SUPPORTED_COMPONENTS:
                     ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
                 return sccs
+            return None
+
+        if tag == CalDavProp.MAX_RESOURCE_SIZE:
+            if target.kind == ResourceKind.CALENDAR:
+                mrs = ET.Element(qname(CALDAV, CalDavProp.MAX_RESOURCE_SIZE))
+                mrs.text = "10485760"
+                return mrs
             return None
 
     elif ns == CALSERVER:
@@ -178,10 +199,12 @@ def append_propfind_response(
             (DAV, DavProp.DISPLAYNAME),
             (DAV, DavProp.OWNER),
             (DAV, DavProp.CURRENT_USER_PRINCIPAL),
+            (DAV, DavProp.CURRENT_USER_PRIVILEGE_SET),
             (CALDAV, CalDavProp.CALENDAR_HOME_SET),
         ]
         if target.kind == ResourceKind.CALENDAR:
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
+            default_props.append((CALDAV, CalDavProp.MAX_RESOURCE_SIZE))
             default_props.append((CALSERVER, CalServerProp.GETCTAG))
         if target.etag:
             default_props.append((DAV, DavProp.GETETAG))
