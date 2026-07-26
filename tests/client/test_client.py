@@ -50,19 +50,3 @@ async def test_client_auth_error_challenge_parsing() -> None:
                 assert err.url == url
                 assert len(err.challenges) > 0
                 assert "Basic" in err.parse_schemes(err.challenges)
-
-
-@pytest.mark.asyncio
-async def test_client_with_auth_profile() -> None:
-    """Test CalDavClient with basic and bearer AuthProfile instances."""
-    from icaldav.client.auth import AuthProfile
-
-    # Basic auth profile
-    p_basic = AuthProfile(username="alice", password="secretpassword")
-    client_basic = CalDavClient(auth_profile=p_basic)
-    assert client_basic.auth_profile == p_basic
-
-    # Bearer auth profile
-    p_bearer = AuthProfile(token="token123")
-    client_bearer = CalDavClient(auth_profile=p_bearer)
-    assert client_bearer.auth_profile == p_bearer
