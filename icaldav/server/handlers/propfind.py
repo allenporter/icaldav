@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args
-from icaldav.store.principal import PrincipalStore, SingleUserPrincipalStore
+from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
 from icaldav.store.types import LocalStore
 from icaldav.xml.namespaces import DAV, qname
 from icaldav.xml.propfind.request import parse_propfind_request
@@ -25,7 +25,7 @@ class PropfindHandler:
         principal_store: PrincipalStore | None = None,
     ) -> None:
         self.store = store
-        self.principal_store = principal_store or SingleUserPrincipalStore()
+        self.principal_store = principal_store or InMemoryPrincipalStore()
 
     async def handle_root(self, request: web.Request) -> web.Response:
         """Handle PROPFIND request for root '/' autodiscovery."""

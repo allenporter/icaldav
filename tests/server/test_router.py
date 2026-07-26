@@ -34,10 +34,10 @@ async def test_router_create_app() -> None:
 @pytest.mark.asyncio
 async def test_router_with_custom_principal_store() -> None:
     """Test CalDavRouter with custom PrincipalStore integration."""
-    from icaldav.store.principal import SingleUserPrincipalStore
+    from icaldav.store.principal import InMemoryPrincipalStore
 
     store = MemoryStore()
-    p_store = SingleUserPrincipalStore(
+    p_store = InMemoryPrincipalStore.create_single_user(
         user_id="custom",
         principal_path="/principals/custom/",
         calendar_home_path="/custom_home/",

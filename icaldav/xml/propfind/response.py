@@ -20,10 +20,10 @@ from icaldav.xml.namespaces import (
 )
 from icaldav.xml.propfind.models import PropfindItem, Propstat
 
-from icaldav.store.principal import PrincipalInfo, SingleUserPrincipalStore
+from icaldav.store.principal import InMemoryPrincipalStore, PrincipalInfo
 
 _LOGGER = logging.getLogger(__name__)
-_DEFAULT_PRINCIPAL = SingleUserPrincipalStore()._principal
+_DEFAULT_PRINCIPAL = InMemoryPrincipalStore()._principals["user"]
 
 
 def create_property_element(
