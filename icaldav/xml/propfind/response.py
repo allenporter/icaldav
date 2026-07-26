@@ -85,16 +85,6 @@ def create_property_element(
         href_elem.text = p_info.email
         return cuas
 
-    if ns == CALDAV and tag == CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET:
-        if is_collection:
-            sccs = ET.Element(
-                qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET)
-            )
-            for comp in ("VEVENT", "VTODO", "VJOURNAL"):
-                ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
-            return sccs
-        return None
-
     if ns == DAV and tag == DavProp.DISPLAYNAME:
         dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
         dn.text = href.strip("/").split("/")[-1] or "Calendar"
@@ -116,7 +106,6 @@ def append_propfind_response(
     RFC References:
         - RFC 4918 Section 9.1 & 14.22: 200 OK and 404 Not Found propstat status groups.
         - RFC 5397 Section 3: DAV:current-user-principal.
-        - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
     """
     resp = ET.SubElement(root, qname(DAV, "response"))
@@ -126,12 +115,9 @@ def append_propfind_response(
     if requested_props is None:
         default_props = [
             (DAV, DavProp.RESOURCETYPE),
-            (DAV, DavProp.DISPLAYNAME),
             (DAV, DavProp.CURRENT_USER_PRINCIPAL),
             (CALDAV, CalDavProp.CALENDAR_HOME_SET),
         ]
-        if is_collection:
-            default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
         if etag:
             default_props.append((DAV, DavProp.GETETAG))
 
