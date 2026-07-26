@@ -146,3 +146,19 @@ def test_create_property_element_resourcetype_variants() -> None:
     assert c_rt is not None
     c_tags = [strip_ns(child.tag) for child in c_rt]
     assert c_tags == ["collection", "calendar"]
+
+
+def test_classify_resource() -> None:
+    """Test ResourceKind classification for various URL paths."""
+    from icaldav.xml.propfind.response import ResourceKind, classify_resource
+
+    assert (
+        classify_resource("/principals/user/", is_collection=True)
+        == ResourceKind.PRINCIPAL
+    )
+    assert classify_resource("/", is_collection=True) == ResourceKind.ROOT
+    assert classify_resource("/work/", is_collection=True) == ResourceKind.CALENDAR
+    assert (
+        classify_resource("/work/event.ics", is_collection=False)
+        == ResourceKind.RESOURCE
+    )
