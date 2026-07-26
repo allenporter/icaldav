@@ -49,15 +49,14 @@ class CalDavRouter:
         app.router.add_route("PROPFIND", "/", self.propfind_handler.handle_root)
 
         # Collections
-        app.router.add_route(
-            "MKCALENDAR", "/{collection_id}", self.collection_handler.handle_mkcalendar
-        )
-        app.router.add_route(
-            "PROPFIND", "/{collection_id}", self.propfind_handler.handle_collection
-        )
-        app.router.add_route(
-            "REPORT", "/{collection_id}", self.report_handler.handle_report
-        )
+        for path in ("/{collection_id}", "/{collection_id}/"):
+            app.router.add_route(
+                "MKCALENDAR", path, self.collection_handler.handle_mkcalendar
+            )
+            app.router.add_route(
+                "PROPFIND", path, self.propfind_handler.handle_collection
+            )
+            app.router.add_route("REPORT", path, self.report_handler.handle_report)
 
         # Resources
         app.router.add_route(
