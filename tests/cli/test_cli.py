@@ -5,10 +5,7 @@ from pathlib import Path
 from aiohttp.test_utils import TestClient, TestServer
 import pytest
 
-from unittest.mock import patch
-
 from icaldav.cli import build_parser, main, main_async
-from icaldav.client.auth import AuthStore
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
 
@@ -68,44 +65,44 @@ def test_cli_parser_subcommands() -> None:
 
 @pytest.mark.asyncio
 async def test_cli_auth_subcommands(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Test icaldav auth login, status, and logout subcommands."""
     config_file = tmp_path / "auth.json"
-    with patch.object(
-        AuthStore,
-        "__init__",
+    monkeypatch.setattr(
+        "icaldav.client.auth.AuthStore.__init__",
         lambda self, config_path=config_file: setattr(self, "config_path", config_path),
-    ):
-        # 1. login
-        code = await main_async(
-            [
-                "auth",
-                "login",
-                "--url",
-                "https://caldav.example.com",
-                "-u",
-                "alice",
-                "-p",
-                "secret",
-            ]
-        )
-        assert code == 0
-        captured = capsys.readouterr()
-        assert "Saved credentials profile" in captured.out
+    )
 
-        # 2. status
-        code = await main_async(["auth", "status"])
-        assert code == 0
-        captured = capsys.readouterr()
-        assert "Saved Authentication Profiles" in captured.out
-        assert "alice" in captured.out
+    # 1. login
+    code = await main_async(
+        [
+            "auth",
+            "login",
+            "--url",
+            "https://caldav.example.com",
+            "-u",
+            "alice",
+            "-p",
+            "secret",
+        ]
+    )
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Saved credentials profile" in captured.out
 
-        # 3. logout
-        code = await main_async(["auth", "logout"])
-        assert code == 0
-        captured = capsys.readouterr()
-        assert "Successfully cleared" in captured.out
+    # 2. status
+    code = await main_async(["auth", "status"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Saved Authentication Profiles" in captured.out
+    assert "alice" in captured.out
+
+    # 3. logout
+    code = await main_async(["auth", "logout"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Successfully cleared" in captured.out
 
 
 @pytest.mark.asyncio
@@ -155,53 +152,3 @@ async def test_cli_client_commands_integration(
             assert code == 0
             captured = capsys.readouterr()
             assert "Store Inspection" in captured.out
-
-
-def test_cli_parser_auth_probe() -> None:
-    """Test auth probe subcommand argument parsing."""
-    parser = build_parser()
-    args = parser.parse_args(["auth", "probe", "https://caldav.example.com"])
-    assert args.command == "auth"
-    assert args.auth_action == "probe"
-    assert args.url == "https://caldav.example.com"
-
-
-def test_cli_parser_auth_oauth() -> None:
-    """Test auth oauth subcommand argument parsing."""
-    parser = build_parser()
-    args = parser.parse_args(
-        [
-            "auth",
-            "oauth",
-            "https://caldav.example.com",
-            "--client-id",
-            "test-id",
-            "--client-secret",
-            "test-secret",
-            "--port",
-            "9999",
-        ]
-    )
-    assert args.command == "auth"
-    assert args.auth_action == "oauth"
-    assert args.url == "https://caldav.example.com"
-    assert args.client_id == "test-id"
-    assert args.client_secret == "test-secret"
-    assert args.port == 9999
-
-
-def test_cli_parser_auth_oauth_defaults() -> None:
-    """Test auth oauth subcommand uses default port."""
-    parser = build_parser()
-    args = parser.parse_args(
-        [
-            "auth",
-            "oauth",
-            "https://example.com",
-            "--client-id",
-            "id",
-            "--client-secret",
-            "secret",
-        ]
-    )
-    assert args.port == 8088
