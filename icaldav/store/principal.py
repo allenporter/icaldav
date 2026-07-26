@@ -22,7 +22,7 @@ class PrincipalInfo:
     """
 
     user_id: str
-    """Unique account or user identifier string (plain text, e.g. 'user' or 'allen')."""
+    """Unique account or user identifier string (plain text, e.g. 'user' or 'bernard')."""
 
     principal_path: str
     """Canonical WebDAV URL path to the principal resource (RFC 3744 §4.2, e.g. '/principals/user/')."""

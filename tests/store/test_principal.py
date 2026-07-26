@@ -40,20 +40,20 @@ async def test_in_memory_principal_store_add_and_lookup() -> None:
     """Test adding multiple principals and looking up by user_id."""
     store = InMemoryPrincipalStore()
     p2 = PrincipalInfo(
-        user_id="allen",
-        principal_path="/principals/allen/",
-        calendar_home_path="/calendars/allen/",
-        email="mailto:allen@example.com",
+        user_id="bernard",
+        principal_path="/principals/bernard/",
+        calendar_home_path="/calendars/bernard/",
+        email="mailto:bernard@example.com",
     )
     store.add_principal(p2)
 
     # Default lookup returns default user
     assert (await store.get_principal()).user_id == "user"
 
-    # Allen lookup returns allen
-    allen_p = await store.get_principal("allen")
-    assert allen_p.user_id == "allen"
-    assert allen_p.email == "mailto:allen@example.com"
+    # Bernard lookup returns bernard
+    bernard_p = await store.get_principal("bernard")
+    assert bernard_p.user_id == "bernard"
+    assert bernard_p.email == "mailto:bernard@example.com"
 
 
 @pytest.mark.asyncio
