@@ -62,6 +62,9 @@ class CalDavProp(StrEnum):
     CALENDAR_USER_ADDRESS_SET = "calendar-user-address-set"
     """Calendar email addresses (mailto:...) identifying the user for scheduling. RFC 4791 §6.2.2."""
 
+    SUPPORTED_CALENDAR_COMPONENT_SET = "supported-calendar-component-set"
+    """Supported iCalendar component types (VEVENT, VTODO, VJOURNAL) for calendar collections. RFC 4791 §5.2.3."""
+
 
 def qname(ns: str, tag: str) -> str:
     """Construct a Clark notation namespace-qualified tag name.
