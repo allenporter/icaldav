@@ -5,6 +5,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from icaldav.server.router import CalDavRouter
 from icaldav.store.memory import MemoryStore
+from icaldav.store.principal import InMemoryPrincipalStore
 
 
 @pytest.mark.asyncio
@@ -34,8 +35,6 @@ async def test_router_create_app() -> None:
 @pytest.mark.asyncio
 async def test_router_with_custom_principal_store() -> None:
     """Test CalDavRouter with custom PrincipalStore integration."""
-    from icaldav.store.principal import InMemoryPrincipalStore
-
     store = MemoryStore()
     p_store = InMemoryPrincipalStore.create_single_user(
         user_id="custom",

@@ -1,5 +1,6 @@
 target-version = "py313"
 
 [lint]
+preview = true
 ignore = ["E501"]
 extend-select = ["PLC0415"]
