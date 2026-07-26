@@ -10,10 +10,11 @@ import logging
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from icaldav.store.principal import InMemoryPrincipalStore, PrincipalInfo
+from icaldav.store.principal import InMemoryPrincipalStore
 from icaldav.xml.namespaces import (
     CALDAV,
     DAV,
+    DEFAULT_SUPPORTED_COMPONENTS,
     CalDavProp,
     DavProp,
     qname,
@@ -54,10 +55,7 @@ def _build_resourcetype_property(kind: ResourceKind) -> ET.Element:
 def create_property_element(
     ns: str,
     tag: str,
-    href: str | ResourceTarget,
-    is_collection: bool = False,
-    etag: str | None = None,
-    principal: PrincipalInfo | None = None,
+    target: ResourceTarget,
 ) -> ET.Element | None:
     """Construct an XML property Element if supported, or return None if unsupported.
 
@@ -70,36 +68,16 @@ def create_property_element(
         - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
     """
-    if isinstance(href, ResourceTarget):
-        target = href
-    else:
-        clean_h = href.strip()
-        if clean_h.startswith("/principals/"):
-            r_kind = ResourceKind.PRINCIPAL
-        elif not is_collection:
-            r_kind = ResourceKind.RESOURCE
-        elif clean_h.rstrip("/") == "":
-            r_kind = ResourceKind.ROOT
-        else:
-            r_kind = ResourceKind.CALENDAR
-        target = ResourceTarget(
-            href=href,
-            kind=r_kind,
-            etag=etag,
-            principal=principal,
-        )
-
-    p_info = target.principal or principal or _DEFAULT_PRINCIPAL
+    p_info = target.principal or _DEFAULT_PRINCIPAL
 
     if ns == DAV:
         if tag == DavProp.RESOURCETYPE:
             return _build_resourcetype_property(target.kind)
 
         if tag == DavProp.GETETAG:
-            target_etag = target.etag or etag
-            if target_etag:
+            if target.etag:
                 etag_elem = ET.Element(qname(DAV, DavProp.GETETAG))
-                etag_elem.text = f'"{target_etag.strip('"')}"'
+                etag_elem.text = f'"{target.etag.strip('"')}"'
                 return etag_elem
             return None
 
@@ -139,7 +117,7 @@ def create_property_element(
                 sccs = ET.Element(
                     qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET)
                 )
-                for comp in ("VEVENT", "VTODO", "VJOURNAL"):
+                for comp in DEFAULT_SUPPORTED_COMPONENTS:
                     ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
                 return sccs
             return None
@@ -165,11 +143,8 @@ def _append_propstat(
 
 def append_propfind_response(
     root: ET.Element,
-    href: str | ResourceTarget,
-    is_collection: bool = False,
-    etag: str | None = None,
+    target: ResourceTarget,
     requested_props: list[tuple[str, str]] | None = None,
-    principal: PrincipalInfo | None = None,
 ) -> None:
     """Append a single <DAV:response> element to a <DAV:multistatus> root XML element.
 
@@ -179,25 +154,6 @@ def append_propfind_response(
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
         - RFC 4791 Section 6.2.1: CALDAV:calendar-home-set.
     """
-    if isinstance(href, ResourceTarget):
-        target = href
-    else:
-        clean_h = href.strip()
-        if clean_h.startswith("/principals/"):
-            r_kind = ResourceKind.PRINCIPAL
-        elif not is_collection:
-            r_kind = ResourceKind.RESOURCE
-        elif clean_h.rstrip("/") == "":
-            r_kind = ResourceKind.ROOT
-        else:
-            r_kind = ResourceKind.CALENDAR
-        target = ResourceTarget(
-            href=href,
-            kind=r_kind,
-            etag=etag,
-            principal=principal,
-        )
-
     resp = ET.SubElement(root, qname(DAV, "response"))
     ET.SubElement(resp, qname(DAV, "href")).text = target.href
 
@@ -210,7 +166,7 @@ def append_propfind_response(
         ]
         if target.kind == ResourceKind.CALENDAR:
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
-        if target.etag or etag:
+        if target.etag:
             default_props.append((DAV, DavProp.GETETAG))
 
         supported_elems = [

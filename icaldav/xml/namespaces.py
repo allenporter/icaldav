@@ -69,6 +69,9 @@ class CalDavProp(StrEnum):
     """Supported iCalendar component types (VEVENT, VTODO, VJOURNAL) for calendar collections. RFC 4791 §5.2.3."""
 
 
+DEFAULT_SUPPORTED_COMPONENTS = ("VEVENT", "VTODO", "VJOURNAL")
+
+
 def qname(ns: str, tag: str) -> str:
     """Construct a Clark notation namespace-qualified tag name.
 
