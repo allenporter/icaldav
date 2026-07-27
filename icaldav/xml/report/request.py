@@ -16,6 +16,7 @@ from icaldav.xml.report.models import (
     CalendarQueryRequest,
     PrincipalPropertySearchRequest,
     PrincipalSearchCriterion,
+    SyncCollectionRequest,
 )
 
 
@@ -166,11 +167,19 @@ def build_principal_property_search_xml(
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def build_sync_collection_xml(sync_token: str = "") -> bytes:
-    """Build a <DAV:sync-collection> REPORT request XML body (RFC 6578)."""
+def build_sync_collection_xml(
+    sync_token: str = "",
+    limit: int | None = None,
+) -> bytes:
+    """Build a <DAV:sync-collection> REPORT request XML body (RFC 6578 §3)."""
     root = ET.Element(qname(DAV, "sync-collection"))
     st_elem = ET.SubElement(root, qname(DAV, "sync-token"))
     st_elem.text = sync_token
+
+    if limit is not None:
+        limit_elem = ET.SubElement(root, qname(DAV, "limit"))
+        nres_elem = ET.SubElement(limit_elem, qname(DAV, "nresults"))
+        nres_elem.text = str(limit)
     prop_elem = ET.SubElement(root, qname(DAV, "prop"))
     ET.SubElement(prop_elem, qname(DAV, "getetag"))
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
@@ -202,3 +211,32 @@ def parse_principal_property_search(xml_bytes: bytes) -> PrincipalPropertySearch
                 )
 
     return PrincipalPropertySearchRequest(criteria=criteria)
+
+
+def parse_sync_collection(xml_bytes: bytes) -> SyncCollectionRequest:
+    """Parse a <DAV:sync-collection> REPORT request XML body (RFC 6578 §3)."""
+    if not xml_bytes or not xml_bytes.strip():
+        return SyncCollectionRequest(sync_token="")
+
+    root = ET.fromstring(xml_bytes)
+    sync_token = ""
+    sync_level = "1"
+    limit: int | None = None
+
+    for child in root:
+        tag = strip_ns(child.tag)
+        if tag == "sync-token" and child.text:
+            sync_token = child.text.strip()
+        elif tag == "sync-level" and child.text:
+            sync_level = child.text.strip()
+        elif tag == "limit":
+            for nres in child:
+                if strip_ns(nres.tag) == "nresults" and nres.text:
+                    try:
+                        limit = int(nres.text.strip())
+                    except ValueError:
+                        pass
+
+    return SyncCollectionRequest(
+        sync_token=sync_token, sync_level=sync_level, limit=limit
+    )

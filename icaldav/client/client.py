@@ -364,6 +364,7 @@ class CalDavClient:
         self,
         url: str,
         sync_token: str = "",
+        limit: int | None = None,
     ) -> list[ReportResource]:
         """Perform a WebDAV sync-collection REPORT (RFC 6578).
 
@@ -374,19 +375,24 @@ class CalDavClient:
               to synchronize only resources that have been added, modified, or deleted since the
               last sync, drastically reducing bandwidth and latency compared to full collection scans.
 
+        TODO(RFC 6578 §3.7): Multi-page token iteration support.
+        If the server returns a truncated result set with an intermediate sync token,
+        clients must issue follow-up requests in a loop until the final state token is reached.
+
         RFC Reference:
-            - RFC 6578 Section 3: WebDAV Sync Protocol.
+            - RFC 6578 Section 3 & 3.7: WebDAV Sync Protocol & DAV:limit.
 
         Args:
             url: Target calendar collection URI path.
             sync_token: Prior sync token string, or empty string for initial sync.
+            limit: Optional result limit integer for paginated sync queries.
 
         Returns:
             List of ReportResource items for updated resources.
         """
         session = await self._get_session()
         self._warn_insecure_auth(url)
-        body = build_sync_collection_xml(sync_token=sync_token)
+        body = build_sync_collection_xml(sync_token=sync_token, limit=limit)
         headers = {
             "Content-Type": "application/xml; charset=utf-8",
             "Depth": "1",

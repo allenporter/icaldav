@@ -22,6 +22,7 @@ from icaldav.xml.report.request import (
     parse_calendar_multiget,
     parse_calendar_query,
     parse_principal_property_search,
+    parse_sync_collection,
 )
 from icaldav.xml.report.response import build_report_response
 
@@ -63,14 +64,26 @@ class ReportHandler:
         elif root_tag == "principal-property-search":
             return await self._handle_principal_property_search(request, body_bytes)
         elif root_tag == "sync-collection":
-            return await self._handle_sync_collection(collection_id)
+            return await self._handle_sync_collection(collection_id, body_bytes)
         else:
             return web.Response(status=400, text=f"Unsupported REPORT type: {root_tag}")
 
-    async def _handle_sync_collection(self, collection_id: str) -> web.Response:
-        """Evaluate a sync-collection REPORT (RFC 6578)."""
+    async def _handle_sync_collection(
+        self, collection_id: str, body_bytes: bytes
+    ) -> web.Response:
+        """Evaluate a sync-collection REPORT (RFC 6578).
+
+        TODO(RFC 6578 §3.7): Full sync pagination and truncation support.
+        Currently, this handler returns all matched resources in a single response.
+        If a client requests pagination via <DAV:limit><DAV:nresults>, or if a collection
+        is very large, the server should return partial sync tokens per page until complete.
+        """
+        req = parse_sync_collection(body_bytes)
         etags = await self.store.get_etags(collection_id)
         matched = [ReportResource(href=href, etag=etag) for href, etag in etags.items()]
+        if req.limit is not None and req.limit > 0:
+            matched = matched[: req.limit]
+
         xml_bytes = build_report_response(matched)
         return web.Response(
             status=207,
