@@ -6,6 +6,7 @@ import urllib.parse
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from icaldav.client.auth import AuthProfile
 from icaldav.client.oauth import (
     OAuthConfig,
     OAuthSession,
@@ -222,7 +223,6 @@ async def test_discover_oauth_config() -> None:
 
 async def test_auth_profile_auto_refresh() -> None:
     """Test AuthProfile.ensure_fresh_token() auto-refreshes expired OAuth token."""
-    from icaldav.client.auth import AuthProfile
 
     async def handle_refresh(request: web.Request) -> web.Response:
         return web.json_response(

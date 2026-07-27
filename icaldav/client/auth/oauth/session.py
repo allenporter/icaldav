@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import secrets
@@ -10,6 +11,7 @@ import urllib.parse
 from dataclasses import dataclass
 
 import aiohttp
+from aiohttp import web
 from mashumaro.mixins.json import DataClassJSONMixin
 
 from icaldav.client.auth.oauth.config import OAuthConfig
@@ -167,9 +169,6 @@ class OAuthSession:
         Returns:
             Extracted authorization code string.
         """
-        import asyncio
-        from aiohttp import web
-
         code_future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
 
         async def handle_callback(request: web.Request) -> web.Response:

@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import time
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from mashumaro.mixins.json import DataClassJSONMixin
 
+from icaldav.client.auth.oauth.config import OAuthConfig
+from icaldav.client.auth.oauth.session import OAuthSession
+
 if TYPE_CHECKING:
-    from icaldav.client.auth.oauth.config import OAuthConfig
+    pass
 
 
 class AuthScheme(str, Enum):
@@ -73,7 +77,6 @@ class AuthProfile(DataClassJSONMixin):
         """Check if the stored OAuth access token has expired (with 5-minute safety margin)."""
         if self.token_expires_at is None:
             return True
-        import time
 
         return time.time() >= self.token_expires_at - 300
 
@@ -90,9 +93,6 @@ class AuthProfile(DataClassJSONMixin):
             return self.token
         if self.token and not self.is_token_expired:
             return self.token
-
-        from icaldav.client.auth.oauth.config import OAuthConfig
-        from icaldav.client.auth.oauth.session import OAuthSession
 
         config = OAuthConfig(
             client_id=self.client_id or "",
