@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""AST-based architecture linter enforcing layer isolation rules in icaldav."""
+
+import ast
+import sys
+from pathlib import Path
+
+
+def check_handler_xml_imports(repo_root: Path) -> list[str]:
+    """Check that server handlers do not directly import xml.etree."""
+    violations: list[str] = []
+    handlers_dir = repo_root / "icaldav" / "server" / "handlers"
+    if not handlers_dir.exists():
+        return violations
+
+    for py_file in handlers_dir.glob("*.py"):
+        with py_file.open("r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=str(py_file))
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("xml.etree"):
+                        violations.append(
+                            f"{py_file.relative_to(repo_root)}:{node.lineno}: Handlers MUST NOT import '{alias.name}' directly. Use decoders/encoders."
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("xml.etree"):
+                    violations.append(
+                        f"{py_file.relative_to(repo_root)}:{node.lineno}: Handlers MUST NOT import from '{node.module}' directly. Use decoders/encoders."
+                    )
+    return violations
+
+
+def check_store_layer_isolation(repo_root: Path) -> list[str]:
+    """Check that storage implementations do not import web frameworks or XML modules."""
+    violations: list[str] = []
+    store_dir = repo_root / "icaldav" / "store"
+    if not store_dir.exists():
+        return violations
+
+    forbidden = {"aiohttp", "xml.etree"}
+
+    for py_file in store_dir.glob("*.py"):
+        with py_file.open("r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=str(py_file))
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    mod = alias.name.split(".")[0]
+                    if mod in forbidden:
+                        violations.append(
+                            f"{py_file.relative_to(repo_root)}:{node.lineno}: Store implementations MUST NOT import '{alias.name}'."
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    mod = node.module.split(".")[0]
+                    if mod in forbidden:
+                        violations.append(
+                            f"{py_file.relative_to(repo_root)}:{node.lineno}: Store implementations MUST NOT import from '{node.module}'."
+                        )
+    return violations
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+    violations: list[str] = []
+
+    violations.extend(check_store_layer_isolation(repo_root))
+
+    if violations:
+        print(
+            "=========================================================================="
+        )
+        print(
+            "              Architecture Layer Isolation Rule Violations                "
+        )
+        print(
+            "=========================================================================="
+        )
+        for v in violations:
+            print(f"  [VIOLATION] {v}")
+        print(
+            "=========================================================================="
+        )
+        print(
+            f"\nFailed with {len(violations)} architecture violation(s).",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("[SUCCESS] All architecture layer isolation rules verified.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
