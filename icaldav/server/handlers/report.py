@@ -12,12 +12,16 @@ from aiohttp import web
 
 from icaldav.filter import matches_comp_filter
 from icaldav.server.handlers.decorators import path_args
+from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
 from icaldav.store.types import LocalStore
-from icaldav.xml.namespaces import strip_ns
+from icaldav.xml.namespaces import DAV, qname, strip_ns
+from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
+from icaldav.xml.propfind.response import append_propfind_response
 from icaldav.xml.report.models import ReportResource
 from icaldav.xml.report.request import (
     parse_calendar_multiget,
     parse_calendar_query,
+    parse_principal_property_search,
 )
 from icaldav.xml.report.response import build_report_response
 
@@ -27,14 +31,19 @@ _LOGGER = logging.getLogger(__name__)
 class ReportHandler:
     """Handler for CalDAV REPORT method queries."""
 
-    def __init__(self, store: LocalStore) -> None:
+    def __init__(
+        self,
+        store: LocalStore,
+        principal_store: PrincipalStore | None = None,
+    ) -> None:
         self.store = store
+        self.principal_store = principal_store or InMemoryPrincipalStore()
 
     @path_args
     async def handle_report(
-        self, request: web.Request, collection_id: str
+        self, request: web.Request, collection_id: str = ""
     ) -> web.Response:
-        """Handle REPORT request dispatching to calendar-query or calendar-multiget."""
+        """Handle REPORT request dispatching to calendar-query, calendar-multiget, or principal-property-search."""
         body_bytes = await request.read()
         if not body_bytes:
             return web.Response(status=400, text="REPORT requires XML body")
@@ -51,8 +60,59 @@ class ReportHandler:
             return await self._handle_calendar_query(collection_id, body_bytes)
         elif root_tag == "calendar-multiget":
             return await self._handle_calendar_multiget(collection_id, body_bytes)
+        elif root_tag == "principal-property-search":
+            return await self._handle_principal_property_search(request, body_bytes)
+        elif root_tag == "sync-collection":
+            return await self._handle_sync_collection(collection_id)
         else:
             return web.Response(status=400, text=f"Unsupported REPORT type: {root_tag}")
+
+    async def _handle_sync_collection(self, collection_id: str) -> web.Response:
+        """Evaluate a sync-collection REPORT (RFC 6578)."""
+        etags = await self.store.get_etags(collection_id)
+        matched = [ReportResource(href=href, etag=etag) for href, etag in etags.items()]
+        xml_bytes = build_report_response(matched)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
+
+    async def _handle_principal_property_search(
+        self, request: web.Request, body_bytes: bytes
+    ) -> web.Response:
+        """Evaluate a principal-property-search REPORT (RFC 3744 §9.4)."""
+        search_req = parse_principal_property_search(body_bytes)
+
+        principals = []
+        match_terms = [c.match for c in search_req.criteria if c.match]
+        if match_terms:
+            for term in match_terms:
+                found = await self.principal_store.search_principals(term)
+                for p in found:
+                    if p not in principals:
+                        principals.append(p)
+        else:
+            principal = await self.principal_store.get_principal(request.get("user"))
+            principals.append(principal)
+
+        root = ET.Element(qname(DAV, "multistatus"))
+        for p in principals:
+            target = ResourceTarget(
+                href=p.principal_path,
+                kind=ResourceKind.PRINCIPAL,
+                principal=p,
+            )
+            append_propfind_response(root, target)
+
+        xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        return web.Response(
+            status=207,
+            body=xml_bytes,
+            content_type="application/xml",
+            charset="utf-8",
+        )
 
     async def _handle_calendar_query(
         self, collection_id: str, body_bytes: bytes

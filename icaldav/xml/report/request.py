@@ -11,7 +11,12 @@ import xml.etree.ElementTree as ET
 
 from icaldav.filter import CompFilter, TimeRange
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
-from icaldav.xml.report.models import CalendarMultigetRequest, CalendarQueryRequest
+from icaldav.xml.report.models import (
+    CalendarMultigetRequest,
+    CalendarQueryRequest,
+    PrincipalPropertySearchRequest,
+    PrincipalSearchCriterion,
+)
 
 
 def _parse_comp_filter(elem: ET.Element) -> CompFilter:
@@ -145,3 +150,45 @@ def build_calendar_multiget_xml(
         href_elem.text = href
 
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def build_principal_property_search_xml(
+    match: str,
+    prop_tag: str = "displayname",
+) -> bytes:
+    """Build a <DAV:principal-property-search> REPORT request XML body (RFC 3744 §9.4)."""
+    root = ET.Element(qname(DAV, "principal-property-search"))
+    ps_elem = ET.SubElement(root, qname(DAV, "property-search"))
+    prop_elem = ET.SubElement(ps_elem, qname(DAV, "prop"))
+    ET.SubElement(prop_elem, qname(DAV, prop_tag))
+    match_elem = ET.SubElement(ps_elem, qname(DAV, "match"))
+    match_elem.text = match
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def parse_principal_property_search(xml_bytes: bytes) -> PrincipalPropertySearchRequest:
+    """Parse a <DAV:principal-property-search> REPORT request XML body (RFC 3744 §9.4)."""
+    if not xml_bytes or not xml_bytes.strip():
+        return PrincipalPropertySearchRequest(criteria=[])
+
+    root = ET.fromstring(xml_bytes)
+    criteria: list[PrincipalSearchCriterion] = []
+
+    for child in root:
+        if strip_ns(child.tag) == "property-search":
+            prop_tag = ""
+            match_str = ""
+            for search_child in child:
+                stag = strip_ns(search_child.tag)
+                if stag == "prop":
+                    for p in search_child:
+                        prop_tag = strip_ns(p.tag)
+                elif stag == "match" and search_child.text:
+                    match_str = search_child.text.strip()
+
+            if prop_tag and match_str:
+                criteria.append(
+                    PrincipalSearchCriterion(prop_tag=prop_tag, match=match_str)
+                )
+
+    return PrincipalPropertySearchRequest(criteria=criteria)

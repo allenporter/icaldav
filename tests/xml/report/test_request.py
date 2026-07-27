@@ -11,6 +11,7 @@ from icaldav.xml.report.request import (
     build_calendar_query_xml,
     parse_calendar_multiget,
     parse_calendar_query,
+    parse_principal_property_search,
 )
 
 
@@ -61,3 +62,21 @@ def test_build_and_parse_calendar_multiget() -> None:
     assert req.hrefs == hrefs
     assert "getetag" in req.props
     assert "calendar-data" in req.props
+
+
+def test_parse_principal_property_search() -> None:
+    """Test parsing a principal-property-search REPORT XML request."""
+    search_xml = b"""<?xml version="1.0" encoding="utf-8"?>
+    <d:principal-property-search xmlns:d="DAV:">
+        <d:property-search>
+            <d:prop><d:displayname/></d:prop>
+            <d:match>bernard</d:match>
+        </d:property-search>
+    </d:principal-property-search>
+    """
+    req = parse_principal_property_search(search_xml)
+    assert len(req.criteria) == 1
+    assert req.criteria[0].prop_tag == "displayname"
+    assert req.criteria[0].match == "bernard"
+
+    assert parse_principal_property_search(b"").criteria == []

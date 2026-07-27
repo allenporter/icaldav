@@ -48,3 +48,18 @@ class ReportResource:
     href: str
     etag: str
     ics_data: str | None = None
+
+
+@dataclass
+class PrincipalSearchCriterion:
+    """A search criterion inside a <DAV:principal-property-search> REPORT (RFC 3744 §9.4)."""
+
+    prop_tag: str
+    match: str
+
+
+@dataclass
+class PrincipalPropertySearchRequest:
+    """Parsed representation of a <DAV:principal-property-search> REPORT request (RFC 3744 §9.4)."""
+
+    criteria: list[PrincipalSearchCriterion]
