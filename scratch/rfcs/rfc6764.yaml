@@ -1,0 +1,20 @@
+---
+rfc: 6764
+title: "Locating CalDAV and CardDAV Services"
+spec_url: "https://datatracker.ietf.org/doc/html/rfc6764"
+sections:
+  - id: "5"
+    title: "Well-Known URIs"
+    requirements:
+      - id: "REQ-6764-5-1"
+        summary: "Must support /.well-known/caldav endpoint with HTTP 301 or 307 redirect."
+        status: "implemented"
+        details: "CalDavRouter handles /.well-known/caldav route and redirects to root CalDAV endpoint."
+
+  - id: "6"
+    title: "Service Discovery Properties"
+    requirements:
+      - id: "REQ-6764-6-1"
+        summary: "Must allow clients to bootstrap calendar discovery via PROPFIND of principal URL."
+        status: "implemented"
+        details: "Principal discovery properties (calendar-home-set, current-user-principal) allow clients to locate calendar collections."

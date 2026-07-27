@@ -1,0 +1,62 @@
+---
+rfc: 3744
+title: "WebDAV Access Control Protocol (ACL)"
+spec_url: "https://datatracker.ietf.org/doc/html/rfc3744"
+sections:
+  - id: "4.2"
+    title: "DAV:principal-URL Property"
+    requirements:
+      - id: "REQ-3744-4.2-1"
+        summary: "Must advertise DAV:principal-URL property on principal resources."
+        status: "implemented"
+        details: "PROPFIND responses return principal URI path (e.g. '/principals/alice/')."
+
+  - id: "5.1"
+    title: "DAV:owner Property"
+    requirements:
+      - id: "REQ-3744-5.1-1"
+        summary: "Must advertise DAV:owner property on resource and collection items."
+        status: "implemented"
+        details: "PROPFIND responses return owner principal href."
+
+  - id: "5.3"
+    title: "DAV:current-user-privilege-set Property"
+    requirements:
+      - id: "REQ-3744-5.3-1"
+        summary: "Must advertise DAV:current-user-privilege-set property on resources."
+        status: "implemented"
+        details: "PROPFIND responses output DAV:read, DAV:write, and DAV:write-content privilege elements."
+
+  - id: "5.5"
+    title: "Access Control Entries (ACEs)"
+    requirements:
+      - id: "REQ-3744-5.5-1"
+        summary: "Must support granular per-resource Access Control Entries (ACEs) and privilege inheritance trees."
+        status: "not_implemented"
+        details: "Server uses flat per-user authorization model; granular ACE management is not implemented."
+
+  - id: "9.3"
+    title: "ACL Method"
+    requirements:
+      - id: "REQ-3744-9.3-1"
+        summary: "Must support ACL HTTP method for modifying access control lists."
+        status: "not_implemented"
+        details: "ACL method is explicitly excluded from server scope."
+
+  - id: "9.4"
+    title: "DAV:principal-property-search REPORT"
+    requirements:
+      - id: "REQ-3744-9.4-1"
+        summary: "Must parse <DAV:principal-property-search> REPORT request XML body."
+        status: "implemented"
+        details: "parse_principal_property_search extracts property search criteria (displayname, email)."
+
+      - id: "REQ-3744-9.4-2"
+        summary: "Must search principal directory and return matching principal resources in 207 Multi-Status XML."
+        status: "implemented"
+        details: "PrincipalStore.search_principals queries directory store and returns matching user principals."
+
+      - id: "REQ-3744-9.4-3"
+        summary: "Must provide high-level client library method for principal property search queries."
+        status: "implemented"
+        details: "CalDavClient.principal_property_search executes REPORT and parses multistatus response."
