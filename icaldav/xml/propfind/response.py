@@ -63,6 +63,18 @@ def _build_current_user_privilege_set_property() -> ET.Element:
     return cups
 
 
+def _build_supported_report_set_property(kind: ResourceKind) -> ET.Element | None:
+    """Helper constructing <DAV:supported-report-set> element. RFC 3253 §3.1.5, RFC 4791 §5.3.1."""
+    if kind != ResourceKind.CALENDAR:
+        return None
+    srs = ET.Element(qname(DAV, DavProp.SUPPORTED_REPORT_SET))
+    for r_ns, r_tag in ((CALDAV, "calendar-query"), (CALDAV, "calendar-multiget")):
+        sr = ET.SubElement(srs, qname(DAV, "supported-report"))
+        rep = ET.SubElement(sr, qname(DAV, "report"))
+        ET.SubElement(rep, qname(r_ns, r_tag))
+    return srs
+
+
 def create_property_element(
     ns: str,
     tag: str,
@@ -78,6 +90,7 @@ def create_property_element(
         - RFC 3744 Section 4.2: DAV:principal-URL.
         - RFC 3744 Section 5.1: DAV:owner.
         - RFC 3744 Section 5.3: DAV:current-user-privilege-set.
+        - RFC 3253 Section 3.1.5: DAV:supported-report-set.
         - RFC 4791 Section 6.2.2: CALDAV:calendar-user-address-set.
         - RFC 4791 Section 5.2.3: CALDAV:supported-calendar-component-set.
         - RFC 4791 Section 5.2.5: CALDAV:max-resource-size.
@@ -110,6 +123,9 @@ def create_property_element(
 
         if tag == DavProp.CURRENT_USER_PRIVILEGE_SET:
             return _build_current_user_privilege_set_property()
+
+        if tag == DavProp.SUPPORTED_REPORT_SET:
+            return _build_supported_report_set_property(target.kind)
 
         if tag == DavProp.DISPLAYNAME:
             dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
@@ -205,6 +221,7 @@ def append_propfind_response(
         if target.kind == ResourceKind.CALENDAR:
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
             default_props.append((CALDAV, CalDavProp.MAX_RESOURCE_SIZE))
+            default_props.append((DAV, DavProp.SUPPORTED_REPORT_SET))
             default_props.append((CALSERVER, CalServerProp.GETCTAG))
         if target.etag:
             default_props.append((DAV, DavProp.GETETAG))

@@ -197,3 +197,24 @@ def test_create_property_element_privileges_and_max_size() -> None:
     mrs_elem = create_property_element(CALDAV, CalDavProp.MAX_RESOURCE_SIZE, target)
     assert mrs_elem is not None
     assert mrs_elem.text == "10485760"
+
+
+def test_create_property_element_supported_report_set() -> None:
+    """Test DAV:supported-report-set property generation."""
+    cal_target = ResourceTarget(href="/work/", kind=ResourceKind.CALENDAR)
+    srs_elem = create_property_element(DAV, DavProp.SUPPORTED_REPORT_SET, cal_target)
+    assert srs_elem is not None
+    reports: list[str] = []
+    for sr in srs_elem:
+        rep = sr.find(f"{{{DAV}}}report")
+        if rep is not None:
+            for r_child in rep:
+                reports.append(strip_ns(r_child.tag))
+    assert "calendar-query" in reports
+    assert "calendar-multiget" in reports
+
+    # Non-calendar returns None
+    res_target = ResourceTarget(href="/work/event.ics", kind=ResourceKind.RESOURCE)
+    assert (
+        create_property_element(DAV, DavProp.SUPPORTED_REPORT_SET, res_target) is None
+    )

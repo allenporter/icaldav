@@ -60,6 +60,9 @@ class DavProp(StrEnum):
     CURRENT_USER_PRIVILEGE_SET = "current-user-privilege-set"
     """Privileges granted to the authenticated user on this resource. RFC 3744 §5.3."""
 
+    SUPPORTED_REPORT_SET = "supported-report-set"
+    """Supported report types (e.g. calendar-query, calendar-multiget) on collection. RFC 3253 §3.1.5, RFC 4791 §5.3.1."""
+
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""
