@@ -12,3 +12,6 @@ if command -v uv >/dev/null 2>&1; then
 else
   pre-commit run --all-files
 fi
+
+echo ""
+./script/check-rfc-coverage

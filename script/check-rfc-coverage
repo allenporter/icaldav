@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Verification tool for CalDAV/WebDAV RFC groundtruth requirement coverage."""
+
+import sys
+from pathlib import Path
+import yaml
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+    status_dir = repo_root / "docs" / "rfcs" / "status"
+    index_file = status_dir / "index.yaml"
+
+    if not index_file.exists():
+        print(f"Error: Index file not found: {index_file}", file=sys.stderr)
+        return 1
+
+    with index_file.open("r", encoding="utf-8") as f:
+        index_data = yaml.safe_load(f)
+
+    rfcs = index_data.get("groundtruth_rfcs", [])
+    if not rfcs:
+        print("Error: No RFCs defined in index.yaml", file=sys.stderr)
+        return 1
+
+    print("==========================================================================")
+    print("           CalDAV / WebDAV RFC Specification Coverage Report              ")
+    print("==========================================================================")
+    print(
+        f"{'RFC':<10} | {'Total Req':<10} | {'Implemented':<12} | {'Pending':<8} | {'Coverage':<10}"
+    )
+    print("-" * 74)
+
+    total_reqs = 0
+    total_impl = 0
+    total_pending = 0
+    errors = 0
+
+    valid_statuses = {"implemented", "partially_implemented", "not_implemented"}
+
+    for rfc_entry in rfcs:
+        rfc_num = rfc_entry.get("rfc")
+        rel_yaml_path = rfc_entry.get("file")
+        rel_txt_path = rfc_entry.get("local_txt")
+
+        yaml_path = repo_root / rel_yaml_path if rel_yaml_path else None
+        txt_path = repo_root / rel_txt_path if rel_txt_path else None
+
+        if not yaml_path or not yaml_path.exists():
+            print(
+                f"Error: YAML file missing for RFC {rfc_num}: {yaml_path}",
+                file=sys.stderr,
+            )
+            errors += 1
+            continue
+
+        if not txt_path or not txt_path.exists():
+            print(
+                f"Error: Local text file missing for RFC {rfc_num}: {txt_path}",
+                file=sys.stderr,
+            )
+            errors += 1
+
+        with yaml_path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        sections = data.get("sections", [])
+        rfc_total = 0
+        rfc_impl = 0
+        rfc_pending = 0
+
+        for section in sections:
+            sec_id = section.get("id")
+            reqs = section.get("requirements", [])
+            for req in reqs:
+                req_id = req.get("id")
+                status = req.get("status")
+                summary = req.get("summary")
+
+                if not req_id or not status or not summary:
+                    print(
+                        f"Error in {yaml_path.name} Section {sec_id}: missing fields in requirement {req}",
+                        file=sys.stderr,
+                    )
+                    errors += 1
+                    continue
+
+                if status not in valid_statuses:
+                    print(
+                        f"Error in {yaml_path.name} {req_id}: invalid status '{status}'",
+                        file=sys.stderr,
+                    )
+                    errors += 1
+
+                rfc_total += 1
+                if status == "implemented":
+                    rfc_impl += 1
+                else:
+                    rfc_pending += 1
+
+        cov_pct = (rfc_impl / rfc_total * 100) if rfc_total > 0 else 0.0
+        print(
+            f"RFC {rfc_num:<6} | {rfc_total:<10} | {rfc_impl:<12} | {rfc_pending:<8} | {cov_pct:>6.1f}%"
+        )
+
+        total_reqs += rfc_total
+        total_impl += rfc_impl
+        total_pending += rfc_pending
+
+    print("-" * 74)
+    overall_cov = (total_impl / total_reqs * 100) if total_reqs > 0 else 0.0
+    print(
+        f"{'OVERALL':<10} | {total_reqs:<10} | {total_impl:<12} | {total_pending:<8} | {overall_cov:>6.1f}%"
+    )
+    print("==========================================================================")
+
+    if errors > 0:
+        print(f"\nValidation failed with {errors} error(s).", file=sys.stderr)
+        return 1
+
+    print(f"\n[SUCCESS] Groundtruth RFC requirements verified across {len(rfcs)} RFCs.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

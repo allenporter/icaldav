@@ -1,0 +1,31 @@
+---
+groundtruth_rfcs:
+  - file: "docs/rfcs/status/rfc4791.yaml"
+    local_txt: "docs/rfcs/rfc4791.txt"
+    rfc: 4791
+    title: "CalDAV: Calendaring Extensions to WebDAV"
+
+  - file: "docs/rfcs/status/rfc4918.yaml"
+    local_txt: "docs/rfcs/rfc4918.txt"
+    rfc: 4918
+    title: "HTTP Extensions for WebDAV"
+
+  - file: "docs/rfcs/status/rfc6578.yaml"
+    local_txt: "docs/rfcs/rfc6578.txt"
+    rfc: 6578
+    title: "WebDAV Collection Synchronization"
+
+  - file: "docs/rfcs/status/rfc3744.yaml"
+    local_txt: "docs/rfcs/rfc3744.txt"
+    rfc: 3744
+    title: "WebDAV Access Control Protocol (ACL)"
+
+  - file: "docs/rfcs/status/rfc5397.yaml"
+    local_txt: "docs/rfcs/rfc5397.txt"
+    rfc: 5397
+    title: "WebDAV Current Principal Extension"
+
+  - file: "docs/rfcs/status/rfc6764.yaml"
+    local_txt: "docs/rfcs/rfc6764.txt"
+    rfc: 6764
+    title: "Locating CalDAV and CardDAV Services"
