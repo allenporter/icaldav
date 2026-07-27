@@ -17,6 +17,6 @@ sections:
     requirements:
       - id: "REQ-6764-6-1"
         summary: "Must allow clients to bootstrap calendar discovery via PROPFIND of principal URL."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "Principal discovery properties (calendar-home-set, current-user-principal) allow clients to locate calendar collections."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "Principal discovery properties allow clients to locate calendar collections; relies on InMemoryPrincipalStore (Rubric Criterion 3)."

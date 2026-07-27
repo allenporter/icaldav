@@ -62,9 +62,9 @@ sections:
     requirements:
       - id: "REQ-4791-5.3.1-1"
         summary: "Must support MKCALENDAR HTTP method to create calendar collections."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "CalDavRouter handles MKCALENDAR method and creates new calendar collection."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "CalDavRouter creates collection in MemoryStore; persistent database collection creation pending SQLiteStore support (Rubric Criterion 3)."
 
   - id: "5.3.2"
     title: "Creating Calendar Object Resources with PUT"
@@ -73,25 +73,25 @@ sections:
         summary: "Must validate iCalendar content and evaluate ETag and If-Match preconditions during resource modification."
         status: "implemented"
         maturity: "production_grade"
-        details: "PUT checks iCalendar syntax and verifies If-Match ETags to prevent concurrent write overwrites."
+        details: "PUT checks iCalendar syntax and verifies If-Match ETags to prevent concurrent write overwrites across memory and SQLite stores."
 
   - id: "6.2.1"
     title: "CALDAV:calendar-home-set Property"
     requirements:
       - id: "REQ-4791-6.2.1-1"
         summary: "Must advertise CALDAV:calendar-home-set property on principal resources."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "Returns calendar home URI path (e.g. '/calendars/user/') on PROPFIND of principal."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "Returns calendar home URI path on PROPFIND of principal; currently relies on InMemoryPrincipalStore default (Rubric Criterion 3)."
 
   - id: "6.2.2"
     title: "CALDAV:calendar-user-address-set Property"
     requirements:
       - id: "REQ-4791-6.2.2-1"
         summary: "Must advertise CALDAV:calendar-user-address-set property."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "Returns user mailto address URIs for calendar scheduling identity discovery."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "Returns user mailto address URIs; relies on InMemoryPrincipalStore (Rubric Criterion 3)."
 
   - id: "7.8"
     title: "calendar-query REPORT"

@@ -32,9 +32,9 @@ sections:
     requirements:
       - id: "REQ-4918-9.3-1"
         summary: "Must support collection creation via MKCOL method."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "MKCOL creates standard collection containers; MKCALENDAR extends this for calendar collections."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "MKCOL creates standard collection containers in MemoryStore; persistent database collection creation pending SQLiteStore support (Rubric Criterion 3)."
 
   - id: "9.4"
     title: "GET and HEAD Methods"
@@ -104,6 +104,6 @@ sections:
     requirements:
       - id: "REQ-4918-14.11-1"
         summary: "Must return DAV:displayname property on collection resources."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "PROPFIND responses include collection display name element."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "PROPFIND responses include collection display name element; persistent custom property modification pending PROPPATCH (Rubric Criterion 3)."

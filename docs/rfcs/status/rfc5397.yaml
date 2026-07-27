@@ -8,9 +8,9 @@ sections:
     requirements:
       - id: "REQ-5397-3-1"
         summary: "Must advertise DAV:current-user-principal property on DAV resources."
-        status: "implemented"
-        maturity: "production_grade"
-        details: "PROPFIND responses return <DAV:current-user-principal><DAV:href>/principals/user/</DAV:href></DAV:current-user-principal>."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "PROPFIND responses return current-user-principal href; currently uses InMemoryPrincipalStore default (Rubric Criterion 3)."
 
       - id: "REQ-5397-3-2"
         summary: "Must return <DAV:unauthenticated/> element when request is unauthenticated."
