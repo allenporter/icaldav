@@ -10,10 +10,10 @@ sections:
         summary: "Must advertise DAV:current-user-principal property on DAV resources."
         status: "partially_implemented"
         maturity: "prototype"
-        details: "PROPFIND responses return current-user-principal href; currently uses InMemoryPrincipalStore default (Rubric Criterion 3)."
+        details: "PROPFIND responses return current-user-principal href; relies on InMemoryPrincipalStore default."
 
       - id: "REQ-5397-3-2"
         summary: "Must return <DAV:unauthenticated/> element when request is unauthenticated."
         status: "implemented"
-        maturity: "production_grade"
-        details: "PROPFIND returns unauthenticated principal tag if user session is anonymous."
+        maturity: "prototype"
+        details: "PROPFIND returns unauthenticated principal tag if user session is anonymous; awaiting litmus validation."
