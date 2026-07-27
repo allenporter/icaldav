@@ -325,6 +325,19 @@ class CalDavClient:
     ) -> list[PropfindItem]:
         """Perform a WebDAV principal-property-search REPORT (RFC 3744 §9.4).
 
+        Search for principal resources (users, groups, or services) matching property criteria.
+
+        Use Cases for Clients:
+            - **User Auto-completion & Invitee Search**: In CalDAV scheduling applications,
+              when a user types a name or email in an event invitation field (e.g. "Bernard"),
+              the client uses this REPORT to search for matching user principals on the server
+              and retrieve their principal paths and calendar user addresses (`mailto:`).
+            - **Directory Lookup**: Discovering other users or resource principals available on a
+              shared CalDAV server.
+
+        RFC Reference:
+            - RFC 3744 Section 9.4: DAV:principal-property-search REPORT.
+
         Args:
             url: Target principal collection URI path (default '/').
             match: Case-insensitive search string to match against principal properties.
