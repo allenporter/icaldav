@@ -179,3 +179,21 @@ def test_create_property_element_owner_and_getctag() -> None:
     ctag_elem = create_property_element(CALSERVER, CalServerProp.GETCTAG, target)
     assert ctag_elem is not None
     assert ctag_elem.text == '"ctag-abc"'
+
+
+def test_create_property_element_privileges_and_max_size() -> None:
+    """Test DAV:current-user-privilege-set and CALDAV:max-resource-size property generation."""
+    target = ResourceTarget(href="/work/", kind=ResourceKind.CALENDAR)
+
+    cups_elem = create_property_element(DAV, DavProp.CURRENT_USER_PRIVILEGE_SET, target)
+    assert cups_elem is not None
+    priv_elem = cups_elem.find(f"{{{DAV}}}privilege")
+    assert priv_elem is not None
+    priv_tags = [strip_ns(child.tag) for child in priv_elem]
+    assert "read" in priv_tags
+    assert "write" in priv_tags
+    assert "all" in priv_tags
+
+    mrs_elem = create_property_element(CALDAV, CalDavProp.MAX_RESOURCE_SIZE, target)
+    assert mrs_elem is not None
+    assert mrs_elem.text == "10485760"
