@@ -127,6 +127,17 @@ def create_property_element(
         if tag == DavProp.SUPPORTED_REPORT_SET:
             return _build_supported_report_set_property(target.kind)
 
+        if tag == DavProp.SYNC_TOKEN:
+            if target.kind == ResourceKind.CALENDAR:
+                token_val = (
+                    target.sync_token
+                    or f"http://icaldav.org/ns/sync-tokens/{abs(hash(target.href))}"
+                )
+                st = ET.Element(qname(DAV, DavProp.SYNC_TOKEN))
+                st.text = token_val
+                return st
+            return None
+
         if tag == DavProp.DISPLAYNAME:
             dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
             display_text = (
@@ -222,6 +233,7 @@ def append_propfind_response(
             default_props.append((CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
             default_props.append((CALDAV, CalDavProp.MAX_RESOURCE_SIZE))
             default_props.append((DAV, DavProp.SUPPORTED_REPORT_SET))
+            default_props.append((DAV, DavProp.SYNC_TOKEN))
             default_props.append((CALSERVER, CalServerProp.GETCTAG))
         if target.etag:
             default_props.append((DAV, DavProp.GETETAG))

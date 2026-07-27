@@ -38,6 +38,7 @@ class ResourceTarget:
         displayname: Optional human-readable display name string.
         etag: Optional entity tag string for cache control.
         ctag: Optional collection change tag string for fast client sync diffing.
+        sync_token: Optional synchronization token URI for RFC 6578 WebDAV Sync.
         principal: Optional PrincipalInfo metadata object for WebDAV autodiscovery properties.
     """
 
@@ -46,6 +47,7 @@ class ResourceTarget:
     displayname: str | None = None
     etag: str | None = None
     ctag: str | None = None
+    sync_token: str | None = None
     principal: PrincipalInfo | None = None
 
 

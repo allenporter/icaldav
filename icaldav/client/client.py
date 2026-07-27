@@ -25,6 +25,7 @@ from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,
     build_principal_property_search_xml,
+    build_sync_collection_xml,
 )
 from icaldav.xml.report.response import parse_report_response
 
@@ -358,3 +359,46 @@ class CalDavClient:
             self._check_response(resp)
             content = await resp.read()
             return parse_multistatus_xml(content)
+
+    async def sync_collection(
+        self,
+        url: str,
+        sync_token: str = "",
+        limit: int | None = None,
+    ) -> list[ReportResource]:
+        """Perform a WebDAV sync-collection REPORT (RFC 6578).
+
+        Fetch updated calendar resources changed since the specified sync token.
+
+        Use Cases for Clients:
+            - **Fast Synchronization**: Allows CalDAV client applications (e.g. mobile/desktop apps)
+              to synchronize only resources that have been added, modified, or deleted since the
+              last sync, drastically reducing bandwidth and latency compared to full collection scans.
+
+        TODO(RFC 6578 §3.7): Multi-page token iteration support.
+        If the server returns a truncated result set with an intermediate sync token,
+        clients must issue follow-up requests in a loop until the final state token is reached.
+
+        RFC Reference:
+            - RFC 6578 Section 3 & 3.7: WebDAV Sync Protocol & DAV:limit.
+
+        Args:
+            url: Target calendar collection URI path.
+            sync_token: Prior sync token string, or empty string for initial sync.
+            limit: Optional result limit integer for paginated sync queries.
+
+        Returns:
+            List of ReportResource items for updated resources.
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        body = build_sync_collection_xml(sync_token=sync_token, limit=limit)
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Depth": "1",
+        }
+
+        async with session.request("REPORT", url, data=body, headers=headers) as resp:
+            self._check_response(resp)
+            content = await resp.read()
+            return parse_report_response(content)

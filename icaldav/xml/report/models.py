@@ -63,3 +63,18 @@ class PrincipalPropertySearchRequest:
     """Parsed representation of a <DAV:principal-property-search> REPORT request (RFC 3744 §9.4)."""
 
     criteria: list[PrincipalSearchCriterion]
+
+
+@dataclass
+class SyncCollectionRequest:
+    """Parsed representation of a <DAV:sync-collection> REPORT request (RFC 6578 §3).
+
+    Attributes:
+        sync_token: Synchronization token URI indicating the baseline state.
+        sync_level: Depth level string ("1" or "infinite").
+        limit: Optional maximum number of results requested by client via <DAV:limit><DAV:nresults>.
+    """
+
+    sync_token: str
+    sync_level: str = "1"
+    limit: int | None = None

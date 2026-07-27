@@ -63,6 +63,9 @@ class DavProp(StrEnum):
     SUPPORTED_REPORT_SET = "supported-report-set"
     """Supported report types (e.g. calendar-query, calendar-multiget) on collection. RFC 3253 §3.1.5, RFC 4791 §5.3.1."""
 
+    SYNC_TOKEN = "sync-token"
+    """Synchronization token URI representing collection modification state. RFC 6578 §6.1."""
+
 
 class CalDavProp(StrEnum):
     """Standard CalDAV property local tag names (RFC 4791)."""

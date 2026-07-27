@@ -218,3 +218,18 @@ def test_create_property_element_supported_report_set() -> None:
     assert (
         create_property_element(DAV, DavProp.SUPPORTED_REPORT_SET, res_target) is None
     )
+
+
+def test_create_property_element_sync_token() -> None:
+    """Test DAV:sync-token property generation for calendar collections."""
+    cal_target = ResourceTarget(
+        href="/work/",
+        kind=ResourceKind.CALENDAR,
+        sync_token="http://icaldav.org/ns/sync-tokens/123",
+    )
+    st_elem = create_property_element(DAV, DavProp.SYNC_TOKEN, cal_target)
+    assert st_elem is not None
+    assert st_elem.text == "http://icaldav.org/ns/sync-tokens/123"
+
+    res_target = ResourceTarget(href="/work/event.ics", kind=ResourceKind.RESOURCE)
+    assert create_property_element(DAV, DavProp.SYNC_TOKEN, res_target) is None
