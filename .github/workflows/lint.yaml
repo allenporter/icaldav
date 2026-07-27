@@ -21,6 +21,7 @@ jobs:
       - uses: codespell-project/actions-codespell@v2.1
         with:
           check_hidden: false
+          skip: ./.git,./docs/rfcs
       - name: Validate Renovate configuration
         run: |
           npx --package=renovate@38 -- renovate-config-validator .github/renovate.json5
