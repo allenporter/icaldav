@@ -5,31 +5,47 @@ import ast
 import sys
 from pathlib import Path
 
+# Known legacy violations to track progress during architecture refactoring
+KNOWN_LEGACY_XML_HANDLERS = {
+    "icaldav/server/handlers/propfind.py",
+    "icaldav/server/handlers/report.py",
+}
 
-def check_handler_xml_imports(repo_root: Path) -> list[str]:
+
+def check_handler_xml_imports(repo_root: Path) -> tuple[list[str], list[str]]:
     """Check that server handlers do not directly import xml.etree."""
-    violations: list[str] = []
+    new_violations: list[str] = []
+    legacy_warnings: list[str] = []
     handlers_dir = repo_root / "icaldav" / "server" / "handlers"
     if not handlers_dir.exists():
-        return violations
+        return new_violations, legacy_warnings
 
     for py_file in handlers_dir.glob("*.py"):
+        rel_path = str(py_file.relative_to(repo_root))
         with py_file.open("r", encoding="utf-8") as f:
             tree = ast.parse(f.read(), filename=str(py_file))
 
+        has_xml_import = False
+        lineno = 1
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("xml.etree"):
-                        violations.append(
-                            f"{py_file.relative_to(repo_root)}:{node.lineno}: Handlers MUST NOT import '{alias.name}' directly. Use decoders/encoders."
-                        )
+                        has_xml_import = True
+                        lineno = node.lineno
             elif isinstance(node, ast.ImportFrom):
                 if node.module and node.module.startswith("xml.etree"):
-                    violations.append(
-                        f"{py_file.relative_to(repo_root)}:{node.lineno}: Handlers MUST NOT import from '{node.module}' directly. Use decoders/encoders."
-                    )
-    return violations
+                    has_xml_import = True
+                    lineno = node.lineno
+
+        if has_xml_import:
+            msg = f"{rel_path}:{lineno}: Handlers MUST NOT import 'xml.etree' directly. Use decoders/encoders."
+            if rel_path in KNOWN_LEGACY_XML_HANDLERS:
+                legacy_warnings.append(msg)
+            else:
+                new_violations.append(msg)
+
+    return new_violations, legacy_warnings
 
 
 def check_store_layer_isolation(repo_root: Path) -> list[str]:
@@ -65,32 +81,40 @@ def check_store_layer_isolation(repo_root: Path) -> list[str]:
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
-    violations: list[str] = []
 
-    violations.extend(check_store_layer_isolation(repo_root))
+    store_violations = check_store_layer_isolation(repo_root)
+    new_handler_violations, legacy_warnings = check_handler_xml_imports(repo_root)
 
-    if violations:
+    all_fatal = store_violations + new_handler_violations
+
+    print("==========================================================================")
+    print("           Architecture Layer Isolation Report                            ")
+    print("==========================================================================")
+
+    if legacy_warnings:
+        print(
+            f"Tracking {len(legacy_warnings)} legacy handler XML import(s) pending refactoring:"
+        )
+        for w in legacy_warnings:
+            print(f"  [LEGACY WARNING] {w}")
+    else:
+        print("  [SUCCESS] 0 legacy handler XML imports remain!")
+
+    if store_violations or new_handler_violations:
+        print("\nFATAL ARCHITECTURE VIOLATIONS ENCOUNTERED:")
+        for v in all_fatal:
+            print(f"  [NEW VIOLATION] {v}")
         print(
             "=========================================================================="
         )
         print(
-            "              Architecture Layer Isolation Rule Violations                "
-        )
-        print(
-            "=========================================================================="
-        )
-        for v in violations:
-            print(f"  [VIOLATION] {v}")
-        print(
-            "=========================================================================="
-        )
-        print(
-            f"\nFailed with {len(violations)} architecture violation(s).",
+            f"\nFailed with {len(all_fatal)} new architecture violation(s).",
             file=sys.stderr,
         )
         return 1
 
-    print("[SUCCESS] All architecture layer isolation rules verified.")
+    print("==========================================================================")
+    print("[SUCCESS] Architecture layer isolation rules verified (0 new violations).")
     return 0
 
 
