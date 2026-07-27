@@ -166,6 +166,16 @@ def build_principal_property_search_xml(
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
+def build_sync_collection_xml(sync_token: str = "") -> bytes:
+    """Build a <DAV:sync-collection> REPORT request XML body (RFC 6578)."""
+    root = ET.Element(qname(DAV, "sync-collection"))
+    st_elem = ET.SubElement(root, qname(DAV, "sync-token"))
+    st_elem.text = sync_token
+    prop_elem = ET.SubElement(root, qname(DAV, "prop"))
+    ET.SubElement(prop_elem, qname(DAV, "getetag"))
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
 def parse_principal_property_search(xml_bytes: bytes) -> PrincipalPropertySearchRequest:
     """Parse a <DAV:principal-property-search> REPORT request XML body (RFC 3744 §9.4)."""
     if not xml_bytes or not xml_bytes.strip():

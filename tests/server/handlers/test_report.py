@@ -69,15 +69,13 @@ async def test_report_principal_property_search() -> None:
 
 @pytest.mark.asyncio
 async def test_report_sync_collection() -> None:
-    """Test sync-collection REPORT dispatching in router."""
+    """Test sync-collection REPORT dispatching using CalDavClient."""
     store = MemoryStore()
     app = create_app(store)
-    async with TestClient(TestServer(app)) as client:
-        sync_xml = (
-            b"<?xml version='1.0' encoding='utf-8'?>"
-            b"<d:sync-collection xmlns:d='DAV:'>"
-            b"<d:sync-token>http://icaldav.org/ns/sync-tokens/1</d:sync-token>"
-            b"</d:sync-collection>"
-        )
-        resp = await client.request("REPORT", "/work/", data=sync_xml)
-        assert resp.status == 207
+    async with TestClient(TestServer(app)) as test_client:
+        async with CalDavClient(session=test_client.session) as caldav_client:
+            resources = await caldav_client.sync_collection(
+                url=str(test_client.make_url("/work/")),
+                sync_token="http://icaldav.org/ns/sync-tokens/1",
+            )
+            assert isinstance(resources, list)
