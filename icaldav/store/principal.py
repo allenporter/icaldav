@@ -57,6 +57,17 @@ class PrincipalStore(Protocol):
         """
         ...
 
+    async def search_principals(self, match_str: str) -> list[PrincipalInfo]:
+        """Search registered principals matching substring in user_id or email.
+
+        Args:
+            match_str: Case-insensitive search substring.
+
+        Returns:
+            List of matching PrincipalInfo objects.
+        """
+        ...
+
 
 class InMemoryPrincipalStore:
     """In-memory principal store for standalone/local deployment and multi-user testing."""
@@ -139,6 +150,22 @@ class InMemoryPrincipalStore:
         if target_id not in self._principals:
             raise KeyError(f"Principal for user '{target_id}' not found")
         return self._principals[target_id]
+
+    async def search_principals(self, match_str: str) -> list[PrincipalInfo]:
+        """Search registered principals matching substring in user_id or email.
+
+        Args:
+            match_str: Case-insensitive search substring.
+
+        Returns:
+            List of matching PrincipalInfo objects.
+        """
+        match_lower = match_str.lower()
+        return [
+            p
+            for p in self._principals.values()
+            if match_lower in p.user_id.lower() or match_lower in p.email.lower()
+        ]
 
 
 # Backward compatibility alias

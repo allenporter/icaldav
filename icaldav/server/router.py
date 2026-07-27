@@ -38,7 +38,7 @@ class CalDavRouter:
         self.store = store
         self.principal_store = principal_store
         self.propfind_handler = PropfindHandler(store, principal_store=principal_store)
-        self.report_handler = ReportHandler(store)
+        self.report_handler = ReportHandler(store, principal_store=principal_store)
         self.resource_handler = ResourceHandler(store)
         self.collection_handler = CollectionHandler(store)
 
@@ -56,6 +56,10 @@ class CalDavRouter:
         app.router.add_route("PROPFIND", "/", self.propfind_handler.handle_root)
         app.router.add_route(
             "PROPFIND", "/principals/{tail:.*}", self.propfind_handler.handle_root
+        )
+        app.router.add_route("REPORT", "/", self.report_handler.handle_report)
+        app.router.add_route(
+            "REPORT", "/principals/{tail:.*}", self.report_handler.handle_report
         )
 
         # Collections

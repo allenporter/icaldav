@@ -24,6 +24,7 @@ from icaldav.xml.report.models import ReportResource
 from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,
+    build_principal_property_search_xml,
 )
 from icaldav.xml.report.response import parse_report_response
 
@@ -315,3 +316,45 @@ class CalDavClient:
             self._check_response(resp)
             content = await resp.read()
             return parse_report_response(content)
+
+    async def principal_property_search(
+        self,
+        url: str = "/",
+        match: str = "",
+        prop_tag: str = "displayname",
+    ) -> list[PropfindItem]:
+        """Perform a WebDAV principal-property-search REPORT (RFC 3744 §9.4).
+
+        Search for principal resources (users, groups, or services) matching property criteria.
+
+        Use Cases for Clients:
+            - **User Auto-completion & Invitee Search**: In CalDAV scheduling applications,
+              when a user types a name or email in an event invitation field (e.g. "Bernard"),
+              the client uses this REPORT to search for matching user principals on the server
+              and retrieve their principal paths and calendar user addresses (`mailto:`).
+            - **Directory Lookup**: Discovering other users or resource principals available on a
+              shared CalDAV server.
+
+        RFC Reference:
+            - RFC 3744 Section 9.4: DAV:principal-property-search REPORT.
+
+        Args:
+            url: Target principal collection URI path (default '/').
+            match: Case-insensitive search string to match against principal properties.
+            prop_tag: Local property tag name to search (default 'displayname').
+
+        Returns:
+            List of parsed PropfindItem objects representing matching principals.
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        body = build_principal_property_search_xml(match=match, prop_tag=prop_tag)
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+            "Depth": "0",
+        }
+
+        async with session.request("REPORT", url, data=body, headers=headers) as resp:
+            self._check_response(resp)
+            content = await resp.read()
+            return parse_multistatus_xml(content)
