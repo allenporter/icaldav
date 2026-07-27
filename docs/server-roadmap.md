@@ -2,6 +2,11 @@
 
 Feature status, specification compliance matrix, and implementation maturity tracking for `CalDavRouter`.
 
+See also:
+* **Handoff Blueprint**: [AGENT_HANDOFF.md](AGENT_HANDOFF.md)
+* **Architecture Roadmap**: [architecture-roadmap.md](architecture-roadmap.md)
+* **Production-Grade Maturity Rubric**: [rfcs/RUBRIC.md](rfcs/RUBRIC.md)
+
 ---
 
 ## Specification Compliance & Maturity Matrix

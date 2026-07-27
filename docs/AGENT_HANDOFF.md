@@ -23,12 +23,12 @@ This single command runs:
 ## 2. Track 1: Architecture Cleanup & IR Engine (Internal Track)
 
 * **Goal**: Decouple WebDAV HTTP route handlers from XML parsing/formatting via the 3-Layer Intermediate Representation (IR) Engine (`icaldav/engine/`).
-* **Design Spec**: [`docs/architecture-design-space.md`](file:///Users/allen/Development/icaldav/docs/architecture-design-space.md)
-* **Roadmap & Task List**: [`docs/architecture-roadmap.md`](file:///Users/allen/Development/icaldav/docs/architecture-roadmap.md)
+* **Design Spec**: [architecture-design-space.md](architecture-design-space.md)
+* **Roadmap & Task List**: [architecture-roadmap.md](architecture-roadmap.md)
 * **Verification Tool**: `./script/check-architecture`
 
 ### Immediate Next Step for Track 1:
-Begin **Phase 2 of `docs/architecture-roadmap.md`**:
+Begin **Phase 2 of `architecture-roadmap.md`**:
 1. Create `icaldav/engine/models.py` with strongly-typed request/response IR dataclasses (`PropfindQuery`, `SyncCollectionQuery`, `CalendarQuery`, `WebDavMultiStatus`, `PropstatBlock`).
 2. Create `icaldav/engine/core.py` with pure domain evaluation methods operating on storage interfaces (`LocalStore`, `PrincipalStore`).
 3. Add pure domain unit tests in `tests/engine/test_core.py` (zero HTTP and zero XML dependencies).
@@ -38,10 +38,10 @@ Begin **Phase 2 of `docs/architecture-roadmap.md`**:
 ## 3. Track 2: Specification Compliance & Production Maturity (External Spec Track)
 
 * **Goal**: Fulfill all groundtruth RFC requirements (RFC 4791, 4918, 6578, 3744, 5397, 6764) and upgrade them from `prototype` to `production_grade` by passing automated compliance test suites (`litmus`, `caldavtester`).
-* **Maturity Rubric**: [`docs/rfcs/RUBRIC.md`](file:///Users/allen/Development/icaldav/docs/rfcs/RUBRIC.md)
-* **Server Roadmap**: [`docs/server-roadmap.md`](file:///Users/allen/Development/icaldav/docs/server-roadmap.md)
-* **Groundtruth Requirements Database**: [`docs/rfcs/status/`](file:///Users/allen/Development/icaldav/docs/rfcs/status/)
-* **Mirrored RFC Texts**: [`docs/rfcs/*.txt`](file:///Users/allen/Development/icaldav/docs/rfcs/)
+* **Maturity Rubric**: [rfcs/RUBRIC.md](rfcs/RUBRIC.md)
+* **Server Roadmap**: [server-roadmap.md](server-roadmap.md)
+* **Groundtruth Requirements Database**: [rfcs/status/](rfcs/status/)
+* **Mirrored RFC Texts**: [rfcs/](rfcs/)
 * **Verification Tool**: `./script/check-rfc-coverage`
 
 ### Immediate Next Step for Track 2:
@@ -57,5 +57,5 @@ Begin **Phase 2 of `docs/architecture-roadmap.md`**:
 
 | Track | Master Spec / ADR | Task Roadmap | Automated Tool | Current State |
 |---|---|---|---|---|
-| **Track 1: Architecture** | [`docs/architecture-design-space.md`](file:///Users/allen/Development/icaldav/docs/architecture-design-space.md) | [`docs/architecture-roadmap.md`](file:///Users/allen/Development/icaldav/docs/architecture-roadmap.md) | `./script/check-architecture` | Phase 1 Complete (Soft-tracking 2 legacy handler imports). |
-| **Track 2: RFC Compliance** | [`docs/rfcs/RUBRIC.md`](file:///Users/allen/Development/icaldav/docs/rfcs/RUBRIC.md) | [`docs/server-roadmap.md`](file:///Users/allen/Development/icaldav/docs/server-roadmap.md) | `./script/check-rfc-coverage` | 76.1% Spec Coverage (35/46 reqs), 0% Prod-Grade (Awaiting `litmus` compliance runs). |
+| **Track 1: Architecture** | [architecture-design-space.md](architecture-design-space.md) | [architecture-roadmap.md](architecture-roadmap.md) | `./script/check-architecture` | Phase 1 Complete (Soft-tracking 2 legacy handler imports). |
+| **Track 2: RFC Compliance** | [rfcs/RUBRIC.md](rfcs/RUBRIC.md) | [server-roadmap.md](server-roadmap.md) | `./script/check-rfc-coverage` | 76.1% Spec Coverage (35/46 reqs), 0% Prod-Grade (Awaiting `litmus` compliance runs). |
