@@ -4,7 +4,9 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
+        exclude: '^docs/rfcs/.*'
       - id: end-of-file-fixer
+        exclude: '^docs/rfcs/.*'
       - id: check-yaml
       - id: check-added-large-files
   - repo: local
@@ -32,6 +34,7 @@ repos:
     rev: v2.2.6
     hooks:
       - id: codespell
+        exclude: '^docs/rfcs/.*'
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.37.1
     hooks:

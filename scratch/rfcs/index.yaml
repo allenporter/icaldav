@@ -1,6 +1,7 @@
 ---
 groundtruth_rfcs:
   - file: "scratch/rfcs/rfc4791.yaml"
+    local_txt: "docs/rfcs/rfc4791.txt"
     rfc: 4791
     title: "CalDAV: Calendaring Extensions to WebDAV"
     status_summary:
@@ -10,6 +11,7 @@ groundtruth_rfcs:
       spec_coverage: "85%"
 
   - file: "scratch/rfcs/rfc4918.yaml"
+    local_txt: "docs/rfcs/rfc4918.txt"
     rfc: 4918
     title: "HTTP Extensions for WebDAV"
     status_summary:
@@ -19,6 +21,7 @@ groundtruth_rfcs:
       spec_coverage: "60%"
 
   - file: "scratch/rfcs/rfc6578.yaml"
+    local_txt: "docs/rfcs/rfc6578.txt"
     rfc: 6578
     title: "WebDAV Collection Synchronization"
     status_summary:
@@ -28,6 +31,7 @@ groundtruth_rfcs:
       spec_coverage: "40%"
 
   - file: "scratch/rfcs/rfc3744.yaml"
+    local_txt: "docs/rfcs/rfc3744.txt"
     rfc: 3744
     title: "WebDAV Access Control Protocol (ACL)"
     status_summary:
@@ -37,6 +41,7 @@ groundtruth_rfcs:
       spec_coverage: "50%"
 
   - file: "scratch/rfcs/rfc5397.yaml"
+    local_txt: "docs/rfcs/rfc5397.txt"
     rfc: 5397
     title: "WebDAV Current Principal Extension"
     status_summary:
@@ -46,6 +51,7 @@ groundtruth_rfcs:
       spec_coverage: "100%"
 
   - file: "scratch/rfcs/rfc6764.yaml"
+    local_txt: "docs/rfcs/rfc6764.txt"
     rfc: 6764
     title: "Locating CalDAV and CardDAV Services"
     status_summary:
