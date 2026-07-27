@@ -4,6 +4,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 import pytest
 
+from icaldav.client.auth import AuthProfile
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavAuthError
 from icaldav.server.router import create_app
@@ -55,8 +56,6 @@ async def test_client_auth_error_challenge_parsing() -> None:
 @pytest.mark.asyncio
 async def test_client_with_auth_profile() -> None:
     """Test CalDavClient with basic and bearer AuthProfile instances."""
-    from icaldav.client.auth import AuthProfile
-
     # Basic auth profile
     p_basic = AuthProfile(username="alice", password="secretpassword")
     client_basic = CalDavClient(auth_profile=p_basic)
