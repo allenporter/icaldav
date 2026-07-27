@@ -7,8 +7,9 @@ sections:
     title: "Calendar Access Support"
     requirements:
       - id: "REQ-4791-5.1-1"
-        summary: "Must advertise 'calendar-access' token in OPTIONS DAV response header."
+        summary: "Must advertise 'calendar-access' feature tag in OPTIONS DAV response header."
         status: "implemented"
+        maturity: "production_grade"
         details: "CalDavRouter responds with 'DAV: 1, calendar-access' header on OPTIONS and WebDAV requests."
 
   - id: "5.2.1"
@@ -17,6 +18,7 @@ sections:
       - id: "REQ-4791-5.2.1-1"
         summary: "Must support human-readable description string property on calendar collections."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "Property definition in place; dynamic set/get via PROPPATCH is pending PROPPATCH implementation."
 
   - id: "5.2.2"
@@ -25,6 +27,7 @@ sections:
       - id: "REQ-4791-5.2.2-1"
         summary: "Must support VTIMEZONE component definition on calendar collections."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "Calendar collections use UTC/system default timezone; custom per-collection VTIMEZONE storage not implemented."
 
   - id: "5.2.3"
@@ -33,6 +36,7 @@ sections:
       - id: "REQ-4791-5.2.3-1"
         summary: "Must advertise CALDAV:supported-calendar-component-set property."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns VEVENT, VTODO, and VJOURNAL component types inside PROPFIND propstat."
 
   - id: "5.2.4"
@@ -41,6 +45,7 @@ sections:
       - id: "REQ-4791-5.2.4-1"
         summary: "Must advertise supported calendar content types and versions."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns text/calendar version 2.0 inside PROPFIND propstat."
 
   - id: "5.2.5"
@@ -49,6 +54,7 @@ sections:
       - id: "REQ-4791-5.2.5-1"
         summary: "Must advertise CALDAV:max-resource-size property."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns 10485760 (10MB) maximum payload size in PROPFIND propstat."
 
   - id: "5.3.1"
@@ -57,6 +63,7 @@ sections:
       - id: "REQ-4791-5.3.1-1"
         summary: "Must support MKCALENDAR HTTP method to create calendar collections."
         status: "implemented"
+        maturity: "production_grade"
         details: "CalDavRouter handles MKCALENDAR method and creates new calendar collection."
 
   - id: "5.3.2"
@@ -65,6 +72,7 @@ sections:
       - id: "REQ-4791-5.3.2-1"
         summary: "Must validate iCalendar content and evaluate ETag and If-Match preconditions during resource modification."
         status: "implemented"
+        maturity: "production_grade"
         details: "PUT checks iCalendar syntax and verifies If-Match ETags to prevent concurrent write overwrites."
 
   - id: "6.2.1"
@@ -73,6 +81,7 @@ sections:
       - id: "REQ-4791-6.2.1-1"
         summary: "Must advertise CALDAV:calendar-home-set property on principal resources."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns calendar home URI path (e.g. '/calendars/user/') on PROPFIND of principal."
 
   - id: "6.2.2"
@@ -81,6 +90,7 @@ sections:
       - id: "REQ-4791-6.2.2-1"
         summary: "Must advertise CALDAV:calendar-user-address-set property."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns user mailto address URIs for calendar scheduling identity discovery."
 
   - id: "7.8"
@@ -89,16 +99,19 @@ sections:
       - id: "REQ-4791-7.8-1"
         summary: "Must parse <CALDAV:calendar-query> REPORT request XML body."
         status: "implemented"
+        maturity: "production_grade"
         details: "parse_calendar_query parses comp-filter, time-range, and property list."
 
       - id: "REQ-4791-7.8-2"
         summary: "Must evaluate component name and UTC time-range filter conditions."
         status: "implemented"
+        maturity: "production_grade"
         details: "matches_comp_filter recursively evaluates VEVENT time-range start and end boundaries."
 
       - id: "REQ-4791-7.8-3"
         summary: "Must return 207 Multi-Status XML response containing matching calendar resources."
         status: "implemented"
+        maturity: "production_grade"
         details: "build_report_response formats matching items with ETags and raw .ics payloads."
 
   - id: "7.9"
@@ -107,11 +120,13 @@ sections:
       - id: "REQ-4791-7.9-1"
         summary: "Must parse <CALDAV:calendar-multiget> REPORT containing explicit href elements."
         status: "implemented"
+        maturity: "production_grade"
         details: "parse_calendar_multiget extracts target href paths from request XML."
 
       - id: "REQ-4791-7.9-2"
         summary: "Must batch-fetch requested calendar resources by href path."
         status: "implemented"
+        maturity: "production_grade"
         details: "Returns requested resources in a single 207 Multi-Status response."
 
   - id: "7.10"
@@ -120,4 +135,5 @@ sections:
       - id: "REQ-4791-7.10-1"
         summary: "Must parse <CALDAV:free-busy-query> REPORT and calculate VFREEBUSY components."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "Free-busy query REPORT is not yet implemented."

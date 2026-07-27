@@ -9,9 +9,11 @@ sections:
       - id: "REQ-5397-3-1"
         summary: "Must advertise DAV:current-user-principal property on DAV resources."
         status: "implemented"
+        maturity: "production_grade"
         details: "PROPFIND responses return <DAV:current-user-principal><DAV:href>/principals/user/</DAV:href></DAV:current-user-principal>."
 
       - id: "REQ-5397-3-2"
         summary: "Must return <DAV:unauthenticated/> element when request is unauthenticated."
         status: "implemented"
+        maturity: "production_grade"
         details: "PROPFIND returns unauthenticated principal tag if user session is anonymous."

@@ -9,11 +9,13 @@ sections:
       - id: "REQ-4918-9.1-1"
         summary: "Must support PROPFIND requests for allprop, propname, and explicit prop elements."
         status: "implemented"
+        maturity: "production_grade"
         details: "ResourceTarget parses Depth: 0 and Depth: 1 headers and target property XML list."
 
       - id: "REQ-4918-9.1-2"
         summary: "Must return 207 Multi-Status response with 200 (Found) and 404 (Not Found) propstat blocks."
         status: "implemented"
+        maturity: "production_grade"
         details: "append_propfind_response groups supported properties under status 200 and unknown properties under status 404."
 
   - id: "9.2"
@@ -22,6 +24,7 @@ sections:
       - id: "REQ-4918-9.2-1"
         summary: "Must process <DAV:propertyupdate> requests to set or remove dead WebDAV properties."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "PROPPATCH method is not yet implemented."
 
   - id: "9.3"
@@ -30,6 +33,7 @@ sections:
       - id: "REQ-4918-9.3-1"
         summary: "Must support collection creation via MKCOL method."
         status: "implemented"
+        maturity: "production_grade"
         details: "MKCOL creates standard collection containers; MKCALENDAR extends this for calendar collections."
 
   - id: "9.4"
@@ -38,6 +42,7 @@ sections:
       - id: "REQ-4918-9.4-1"
         summary: "Must return raw calendar resource bytes and HTTP ETag response header."
         status: "implemented"
+        maturity: "production_grade"
         details: "GET returns exact .ics byte stream with content-type text/calendar and matching ETag header."
 
   - id: "9.5"
@@ -46,6 +51,7 @@ sections:
       - id: "REQ-4918-9.5-1"
         summary: "Must handle POST requests as defined for specific application endpoints."
         status: "implemented"
+        maturity: "production_grade"
         details: "CalDavRouter handles POST endpoints where appropriate."
 
   - id: "9.6"
@@ -54,6 +60,7 @@ sections:
       - id: "REQ-4918-9.6-1"
         summary: "Must delete specified calendar resource or collection."
         status: "implemented"
+        maturity: "production_grade"
         details: "DELETE removes resource entry from storage engine and verifies ETag precondition headers if provided."
 
   - id: "9.7"
@@ -62,6 +69,7 @@ sections:
       - id: "REQ-4918-9.7-1"
         summary: "Must create or update calendar resource with provided .ics payload."
         status: "implemented"
+        maturity: "production_grade"
         details: "PUT validates iCalendar payload and stores resource while updating collection change state."
 
   - id: "9.8"
@@ -70,6 +78,7 @@ sections:
       - id: "REQ-4918-9.8-1"
         summary: "Must support copying resources or collections between URI locations."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "COPY method is not yet implemented."
 
   - id: "9.9"
@@ -78,6 +87,7 @@ sections:
       - id: "REQ-4918-9.9-1"
         summary: "Must support moving/renaming resources or collections between URI locations."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "MOVE method is not yet implemented."
 
   - id: "9.10"
@@ -86,6 +96,7 @@ sections:
       - id: "REQ-4918-9.10-1"
         summary: "Must support WebDAV Level 2 resource locking."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "WebDAV Level 2 locking is explicitly excluded from server scope (honest DAV header advertises DAV: 1)."
 
   - id: "14.11"
@@ -94,4 +105,5 @@ sections:
       - id: "REQ-4918-14.11-1"
         summary: "Must return DAV:displayname property on collection resources."
         status: "implemented"
+        maturity: "production_grade"
         details: "PROPFIND responses include collection display name element."

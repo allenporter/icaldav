@@ -9,6 +9,7 @@ sections:
       - id: "REQ-6578-3.1-1"
         summary: "Must parse <DAV:sync-collection> REPORT request containing <DAV:sync-token> element."
         status: "implemented"
+        maturity: "production_grade"
         details: "parse_sync_collection parses sync_token string and optional limit parameters."
 
   - id: "3.2"
@@ -16,12 +17,14 @@ sections:
     requirements:
       - id: "REQ-6578-3.2-1"
         summary: "Must return 207 Multi-Status XML response containing updated resource ETags."
-        status: "implemented"
-        details: "build_report_response constructs Multi-Status XML containing href and getetag for modified items."
+        status: "partially_implemented"
+        maturity: "prototype"
+        details: "build_report_response constructs Multi-Status XML containing href and getetag for modified items, but lacks tombstone tracking for deleted items."
 
       - id: "REQ-6578-3.2-2"
         summary: "Must include deleted resource tombstones with 404 HTTP status responses in sync diff payload."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "Server currently returns active collection ETags; tombstone tracking for deleted items across tokens is a known gap."
 
   - id: "3.7"
@@ -30,11 +33,13 @@ sections:
       - id: "REQ-6578-3.7-1"
         summary: "Must parse <DAV:limit><DAV:nresults> element in sync-collection REPORT requests."
         status: "implemented"
+        maturity: "production_grade"
         details: "SyncCollectionRequest and parse_sync_collection parse integer nresults limit."
 
       - id: "REQ-6578-3.7-2"
         summary: "Must support multi-page token pagination and return intermediate sync tokens when results are truncated."
         status: "not_implemented"
+        maturity: "not_implemented"
         details: "Server currently truncates result array but does not emit intermediate page tokens for multi-page iteration."
 
   - id: "6.1"
@@ -43,4 +48,5 @@ sections:
       - id: "REQ-6578-6.1-1"
         summary: "Must advertise DAV:sync-token property on collection resources."
         status: "implemented"
+        maturity: "production_grade"
         details: "PROPFIND responses output <DAV:sync-token> element containing URI formatted state token."

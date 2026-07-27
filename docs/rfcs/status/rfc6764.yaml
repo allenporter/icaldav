@@ -9,6 +9,7 @@ sections:
       - id: "REQ-6764-5-1"
         summary: "Must support /.well-known/caldav endpoint with HTTP 301 or 307 redirect."
         status: "implemented"
+        maturity: "production_grade"
         details: "CalDavRouter handles /.well-known/caldav route and redirects to root CalDAV endpoint."
 
   - id: "6"
@@ -17,4 +18,5 @@ sections:
       - id: "REQ-6764-6-1"
         summary: "Must allow clients to bootstrap calendar discovery via PROPFIND of principal URL."
         status: "implemented"
+        maturity: "production_grade"
         details: "Principal discovery properties (calendar-home-set, current-user-principal) allow clients to locate calendar collections."
