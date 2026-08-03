@@ -10,7 +10,7 @@ import hashlib
 from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args
-from icaldav.store.types import CalendarResource, LocalStore
+from icaldav.store.types import CalendarResource, LocalStore, ResourcePath
 
 
 class ResourceHandler:
@@ -24,9 +24,9 @@ class ResourceHandler:
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
         """Handle GET request to retrieve a raw calendar object resource."""
-        href = f"/{collection_id}/{resource_id}"
+        path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
-        resource = await self.store.get_resource(collection_id, href)
+        resource = await self.store.get_resource(path)
         if not resource:
             return web.Response(status=404, text="Resource Not Found")
 
@@ -45,22 +45,22 @@ class ResourceHandler:
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
         """Handle PUT request to create or replace an iCalendar object resource file."""
-        href = f"/{collection_id}/{resource_id}"
+        path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
         body_bytes = await request.read()
         ics_content = body_bytes.decode("utf-8")
 
         etag = hashlib.sha256(body_bytes).hexdigest()[:16]
 
-        existing = await self.store.get_resource(collection_id, href)
+        existing = await self.store.get_resource(path)
         status = 204 if existing else 201
 
         resource = CalendarResource(
-            href=href,
+            path=path,
             etag=etag,
             ics_data=ics_content,
         )
-        await self.store.save_resource(collection_id, resource)
+        await self.store.save_resource(resource)
 
         headers = {"ETag": f'"{etag}"'}
         return web.Response(status=status, headers=headers)
@@ -70,9 +70,9 @@ class ResourceHandler:
         self, request: web.Request, collection_id: str, resource_id: str
     ) -> web.Response:
         """Handle DELETE request to remove a calendar object resource."""
-        href = f"/{collection_id}/{resource_id}"
+        path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
-        deleted = await self.store.delete_resource(collection_id, href)
+        deleted = await self.store.delete_resource(path)
         if not deleted:
             return web.Response(status=404, text="Resource Not Found")
 

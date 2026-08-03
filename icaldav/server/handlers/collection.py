@@ -7,7 +7,7 @@ RFC Reference:
 from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args
-from icaldav.store.types import LocalStore
+from icaldav.store.types import CollectionPath, LocalStore
 
 
 class CollectionHandler:
@@ -21,8 +21,9 @@ class CollectionHandler:
         self, request: web.Request, collection_id: str
     ) -> web.Response:
         """Handle MKCALENDAR request to create a new calendar collection."""
-        if await self.store.collection_exists(collection_id):
+        coll = CollectionPath.parse(f"/{collection_id}")
+        if await self.store.collection_exists(coll):
             return web.Response(status=405, text="Collection already exists")
 
-        await self.store.create_collection(collection_id)
+        await self.store.create_collection(coll)
         return web.Response(status=201)

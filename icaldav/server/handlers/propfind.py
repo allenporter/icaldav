@@ -10,7 +10,7 @@ from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args
 from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
-from icaldav.store.types import LocalStore
+from icaldav.store.types import CollectionPath, LocalStore, ResourcePath
 from icaldav.xml.namespaces import DAV, qname
 from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.request import parse_propfind_request
@@ -81,7 +81,8 @@ class PropfindHandler:
         )
 
         if depth != "0":
-            etags = await self.store.get_etags(collection_id)
+            coll = CollectionPath.parse(f"/{collection_id}")
+            etags = await self.store.get_etags(coll)
             for href, etag in etags.items():
                 res_target = ResourceTarget(
                     href=href,
@@ -110,13 +111,13 @@ class PropfindHandler:
         body_bytes = await request.read()
         requested_props = parse_propfind_request(body_bytes)
 
-        href = f"/{collection_id}/{resource_id}"
-        resource = await self.store.get_resource(collection_id, href)
+        path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
+        resource = await self.store.get_resource(path)
         if not resource:
             return web.Response(status=404, text="Resource Not Found")
 
         target = ResourceTarget(
-            href=href,
+            href=path.canonical,
             kind=ResourceKind.RESOURCE,
             etag=resource.etag,
         )

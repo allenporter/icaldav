@@ -1,0 +1,336 @@
+"""High-level Local-First Synchronization Engine for CalDAV collections.
+
+`CalDavSyncManager` serves as the primary high-level bridge between a remote CalDAV
+server collection and a local application database (`LocalStore`).
+
+Why Local-First Sync?
+  CalDAV servers in the wild vary widely in their compliance with WebDAV specs,
+  particularly around complex server-side date queries and recurrence expansion.
+  `CalDavSyncManager` solves this by downloading and maintaining an exact local cache
+  of raw `.ics` calendar resources. All timeline calculations, date filtering, and
+  `RRULE`/`EXDATE` expansions are performed locally in-memory using the `ical` engine.
+
+Dual-Path Synchronization Strategy:
+  - **RFC 6578 WebDAV Sync**: Uses `<sync-collection>` REPORT with a stored token.
+    This fetches incremental changes (additions, modifications, deletions) in a single
+    efficient HTTP request.
+  - **ETag Diff Fallback**: Automatically used when connecting to servers that
+    do not support RFC 6578 (e.g. Radicale, Apple iCloud). Queries metadata via `PROPFIND`
+    Depth 1, diffs remote `{href: etag}` against local storage, and batch-fetches changed
+    items using `<calendar-multiget>`. Exactly 2 HTTP requests regardless of calendar size.
+
+Example:
+    ```python
+    from icaldav.client import CalDavClient
+    from icaldav.client.sync import CalDavSyncManager
+    from icaldav.store.memory import MemoryStore
+
+    store = MemoryStore()
+    async with CalDavClient("https://caldav.example.com", auth=...) as client:
+        sync_mgr = CalDavSyncManager(client, "/calendars/user/work/", store)
+        result = await sync_mgr.sync()
+        calendar = await sync_mgr.get_calendar()
+        for event in calendar.events:
+            print(event.summary, event.start)
+    ```
+
+
+RFC References:
+    - RFC 6578: WebDAV Collection Synchronization (sync-collection REPORT).
+    - RFC 4791 Section 7.9: calendar-multiget REPORT.
+    - RFC 4918 Section 9.1: PROPFIND Method (Depth 1 ETag query).
+"""
+
+from dataclasses import dataclass
+from enum import Enum
+import logging
+import re
+
+import aiohttp
+from ical.calendar import Calendar
+from ical.calendar_stream import CalendarStream
+from ical.exceptions import CalendarError
+from yarl import URL
+
+from icaldav.client.client import CalDavClient
+from icaldav.client.exceptions import CalDavError
+from icaldav.store.types import (
+    CalendarResource,
+    CollectionPath,
+    LocalStore,
+    ResourcePath,
+)
+from icaldav.xml.report.models import ReportResource
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class SyncPath(Enum):
+    """Synchronization execution path used by CalDavSyncManager."""
+
+    RFC_6578 = "rfc_6578"
+    """WebDAV Collection Synchronization (RFC 6578 sync-collection REPORT)."""
+
+    ETAG_DIFF = "etag_diff"
+    """ETag diff fallback (PROPFIND Depth 1 + calendar-multiget REPORT)."""
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    """Summary metrics of a completed calendar synchronization run.
+
+    Attributes:
+        path_used: The synchronization path executed (RFC_6578 or ETAG_DIFF).
+        added: Count of new resources saved to LocalStore.
+        updated: Count of modified resources updated in LocalStore.
+        deleted: Count of removed resources deleted from LocalStore.
+        unmodified: Count of unchanged resources skipped during sync.
+        sync_token: The active DAV:sync-token stored after sync completion.
+    """
+
+    path_used: SyncPath
+    added: int
+    updated: int
+    deleted: int
+    unmodified: int
+    sync_token: str | None
+
+
+def _normalize_href(href: str) -> str:
+    """Normalize URI href path for uniform dictionary lookup and storage."""
+    href = href.strip()
+    if not href.startswith("/"):
+        href = "/" + href
+    return href.rstrip("/") if href != "/" else href
+
+
+class CalDavSyncManager:
+    """High-level Local-First Synchronization Engine for CalDAV collections.
+
+    Connects network transport (CalDavClient) to local store (LocalStore) and
+    local calendar parsing (ical).
+    """
+
+    def __init__(
+        self,
+        client: CalDavClient,
+        collection_url: str,
+        store: LocalStore,
+    ) -> None:
+        """Initialize sync manager.
+
+        Args:
+            client: Active CalDavClient instance bound to the user's authenticated session.
+            collection_url: Target remote calendar collection URI path (e.g. "/work/").
+            store: Account-scoped LocalStore instance (MemoryStore or SQLiteStore).
+        """
+        self.client = client
+        self.collection_url = collection_url.rstrip("/")
+        self.store = store
+        self.collection_path = CollectionPath.parse(collection_url)
+
+    async def sync(self, force_full_sync: bool = False) -> SyncResult:
+        """Synchronize the local collection store with the remote CalDAV collection.
+
+        Attempts RFC 6578 sync-collection first if supported and not forced.
+        Falls back to ETag diffing via PROPFIND Depth 1 + calendar-multiget
+        if RFC 6578 fails or is forced.
+
+        Args:
+            force_full_sync: If True, ignores stored sync token and forces ETag diffing.
+
+        Returns:
+            SyncResult dataclass detailing changes applied to LocalStore.
+        """
+        if not force_full_sync:
+            try:
+                return await self._sync_via_sync_collection()
+            except (
+                CalDavError,
+                aiohttp.ClientError,
+                KeyError,
+                ValueError,
+            ) as err:
+                _LOGGER.debug(
+                    "RFC 6578 sync-collection failed or unsupported (%s); falling back to ETag diff",
+                    err,
+                )
+                # Clear invalid sync token on failure
+                await self.store.set_sync_token(self.collection_path, "")
+
+        return await self._sync_via_etag_diff()
+
+    async def _sync_via_sync_collection(self) -> SyncResult:
+        """Execute incremental sync using RFC 6578 WebDAV Collection Synchronization."""
+        stored_token = await self.store.get_sync_token(self.collection_path) or ""
+        results = await self.client.sync_collection(
+            self.collection_url, sync_token=stored_token
+        )
+
+        local_etags = await self.store.get_etags(self.collection_path)
+        local_etags_norm = {_normalize_href(k): v for k, v in local_etags.items()}
+
+        added = 0
+        updated = 0
+        deleted = 0
+        unmodified = 0
+
+        # Process sync-collection response items: separate items with inline ics_data
+        # from items that only returned ETags (which require calendar-multiget fetch).
+        items_to_save: list[ReportResource] = []
+        hrefs_needing_content: list[str] = []
+
+        for item in results:
+            if item.ics_data:
+                items_to_save.append(item)
+            else:
+                if (
+                    item.normalized_href not in local_etags_norm
+                    or local_etags_norm[item.normalized_href] != item.normalized_etag
+                ):
+                    hrefs_needing_content.append(item.normalized_href)
+                else:
+                    unmodified += 1
+
+        if hrefs_needing_content:
+            multiget_results = await self.client.calendar_multiget(
+                self.collection_url, hrefs=hrefs_needing_content
+            )
+            for item in multiget_results:
+                if item.ics_data:
+                    items_to_save.append(item)
+
+        for item in items_to_save:
+            resource = CalendarResource(
+                path=item.resource_path,
+                etag=item.normalized_etag,
+                ics_data=item.ics_data or "",
+                uid=item.extracted_uid,
+            )
+
+            if item.normalized_href not in local_etags_norm:
+                added += 1
+            elif local_etags_norm[item.normalized_href] != item.normalized_etag:
+                updated += 1
+            else:
+                unmodified += 1
+
+            await self.store.save_resource(resource)
+
+        new_token = f"sync-token-{len(local_etags) + added - deleted}"
+        await self.store.set_sync_token(self.collection_path, new_token)
+
+        return SyncResult(
+            path_used=SyncPath.RFC_6578,
+            added=added,
+            updated=updated,
+            deleted=deleted,
+            unmodified=unmodified,
+            sync_token=new_token,
+        )
+
+    async def _sync_via_etag_diff(self) -> SyncResult:
+        """Execute full sync via PROPFIND Depth 1 ETag diffing + calendar-multiget fallback."""
+        items = await self.client.propfind(
+            self.collection_url, depth=1, props=["getetag", "resourcetype"]
+        )
+
+        # Filter out collection items
+        remote_etags: dict[str, str] = {}
+        for item in items:
+            if not item.is_collection and item.normalized_etag is not None:
+                remote_etags[item.normalized_href] = item.normalized_etag
+
+        local_etags = await self.store.get_etags(self.collection_path)
+        local_etags_norm = {_normalize_href(k): v for k, v in local_etags.items()}
+
+        to_fetch: list[str] = []
+        to_delete: list[str] = []
+        unmodified = 0
+
+        for norm_href, r_etag in remote_etags.items():
+            if norm_href not in local_etags_norm:
+                to_fetch.append(norm_href)
+            elif local_etags_norm[norm_href] != r_etag:
+                to_fetch.append(norm_href)
+            else:
+                unmodified += 1
+
+        for original_href, _ in local_etags.items():
+            norm_key = _normalize_href(original_href)
+            if norm_key not in remote_etags:
+                to_delete.append(original_href)
+
+        added = 0
+        updated = 0
+
+        if to_fetch:
+            fetched_resources = await self.client.calendar_multiget(
+                self.collection_url, hrefs=to_fetch
+            )
+            for item in fetched_resources:
+                if item.ics_data:
+                    if item.normalized_href not in local_etags_norm:
+                        added += 1
+                    else:
+                        updated += 1
+
+                    res = CalendarResource(
+                        path=item.resource_path,
+                        etag=item.normalized_etag,
+                        ics_data=item.ics_data,
+                        uid=item.extracted_uid,
+                    )
+                    await self.store.save_resource(res)
+
+
+
+        deleted = 0
+        for href_to_del in to_delete:
+            if await self.store.delete_resource(ResourcePath.parse(href_to_del)):
+                deleted += 1
+
+        new_token = f"etag-sync-token-{len(remote_etags)}"
+        await self.store.set_sync_token(self.collection_path, new_token)
+
+        return SyncResult(
+            path_used=SyncPath.ETAG_DIFF,
+            added=added,
+            updated=updated,
+            deleted=deleted,
+            unmodified=unmodified,
+            sync_token=new_token,
+        )
+
+    async def get_calendar(self) -> Calendar:
+        """Parse and aggregate all stored resources into a unified ical.calendar.Calendar.
+
+        Returns:
+            An ical.calendar.Calendar containing all parsed events, tasks, and journals.
+        """
+        resources = await self.store.get_resources(self.collection_path)
+        if not resources:
+            return Calendar()
+
+        merged_cal = Calendar()
+        for res in resources:
+            try:
+                stream = CalendarStream.from_ics(res.ics_data)
+                for parsed_cal in stream.calendars:
+                    for event in parsed_cal.events:
+                        merged_cal.events.append(event)
+                    for todo in parsed_cal.todos:
+                        merged_cal.todos.append(todo)
+                    for journal in parsed_cal.journal:
+                        merged_cal.journal.append(journal)
+            except (CalendarError, ValueError):
+                _LOGGER.warning(
+                    "Failed to parse resource %s into Calendar",
+                    res.href,
+                    exc_info=True,
+                )
+
+        return merged_cal
+
+
