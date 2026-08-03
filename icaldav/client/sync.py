@@ -44,16 +44,15 @@ RFC References:
 from dataclasses import dataclass
 from enum import Enum
 import logging
-import re
 
 import aiohttp
 from ical.calendar import Calendar
 from ical.calendar_stream import CalendarStream
 from ical.exceptions import CalendarError
-from yarl import URL
 
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavError
+
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
@@ -284,8 +283,6 @@ class CalDavSyncManager:
                     )
                     await self.store.save_resource(res)
 
-
-
         deleted = 0
         for href_to_del in to_delete:
             if await self.store.delete_resource(ResourcePath.parse(href_to_del)):
@@ -332,5 +329,3 @@ class CalDavSyncManager:
                 )
 
         return merged_cal
-
-

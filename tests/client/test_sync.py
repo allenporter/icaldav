@@ -18,9 +18,9 @@ from icaldav.client.client import CalDavClient
 from icaldav.client.sync import (
     CalDavSyncManager,
     SyncPath,
-    SyncResult,
     _normalize_href,
 )
+
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
 from icaldav.xml.report.models import ReportResource
@@ -113,7 +113,6 @@ def test_extract_uid_and_normalize_href() -> None:
     assert _normalize_href("work/meeting.ics") == "/work/meeting.ics"
     assert _normalize_href("/work/meeting.ics/") == "/work/meeting.ics"
     assert _normalize_href("/") == "/"
-
 
 
 @pytest.mark.asyncio
@@ -209,7 +208,6 @@ async def test_raw_ics_immutability(harness: LoopbackHarness) -> None:
     assert local_res.ics_data == raw_ics
 
 
-
 @pytest.mark.asyncio
 async def test_sync_convergence(harness: LoopbackHarness) -> None:
     """Verify consecutive sync calls with no remote changes yield 0 updates/additions."""
@@ -250,11 +248,14 @@ async def test_uri_trailing_slash_normalization(harness: LoopbackHarness) -> Non
     assert res is not None
 
 
-
 @pytest.mark.asyncio
-async def test_recurrence_exceptions_and_multi_vevent_parse(harness: LoopbackHarness) -> None:
+async def test_recurrence_exceptions_and_multi_vevent_parse(
+    harness: LoopbackHarness,
+) -> None:
     """Verify multi-VEVENT files (recurrence rules and RECURRENCE-ID exceptions) aggregate properly."""
-    await harness.client.put_resource(f"{harness.base_url}recurring.ics", SAMPLE_RECURRENCE_ICS)
+    await harness.client.put_resource(
+        f"{harness.base_url}recurring.ics", SAMPLE_RECURRENCE_ICS
+    )
 
     await harness.sync_manager.sync()
     cal = await harness.sync_manager.get_calendar()
