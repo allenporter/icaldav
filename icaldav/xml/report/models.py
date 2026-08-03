@@ -5,9 +5,12 @@ RFC Reference:
     - RFC 4791 Section 7.9: CALDAV:calendar-multiget REPORT.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from functools import cached_property
 import re
+
 
 from icaldav.filter import CompFilter
 from icaldav.store.types import ResourcePath

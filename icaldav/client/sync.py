@@ -41,9 +41,12 @@ RFC References:
     - RFC 4918 Section 9.1: PROPFIND Method (Depth 1 ETag query).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 import logging
+
 
 import aiohttp
 from ical.calendar import Calendar

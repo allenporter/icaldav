@@ -3,6 +3,8 @@
 Provides fast, transient storage for testing and in-memory calendar caching.
 """
 
+from __future__ import annotations
+
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,

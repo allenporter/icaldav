@@ -5,6 +5,8 @@ RFC References:
   - RFC 6578 Section 3: DAV:sync-token definitions.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Protocol

@@ -5,6 +5,8 @@ RFC Reference:
     - RFC 4918 Section 14.24: DAV:response Element.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cached_property
