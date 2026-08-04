@@ -27,7 +27,10 @@ from icaldav.xml.report.request import (
     build_principal_property_search_xml,
     build_sync_collection_xml,
 )
-from icaldav.xml.report.response import parse_report_response
+from icaldav.xml.report.response import (
+    parse_report_response,
+    parse_sync_collection_response,
+)
 
 
 class CalDavClient:
@@ -365,7 +368,7 @@ class CalDavClient:
         url: str,
         sync_token: str = "",
         limit: int | None = None,
-    ) -> list[ReportResource]:
+    ) -> tuple[list[ReportResource], str | None]:
         """Perform a WebDAV sync-collection REPORT (RFC 6578).
 
         Fetch updated calendar resources changed since the specified sync token.
@@ -388,7 +391,7 @@ class CalDavClient:
             limit: Optional result limit integer for paginated sync queries.
 
         Returns:
-            List of ReportResource items for updated resources.
+            Tuple of (list of ReportResource items for updated resources, server sync_token string or None).
         """
         session = await self._get_session()
         self._warn_insecure_auth(url)
@@ -401,4 +404,4 @@ class CalDavClient:
         async with session.request("REPORT", url, data=body, headers=headers) as resp:
             self._check_response(resp)
             content = await resp.read()
-            return parse_report_response(content)
+            return parse_sync_collection_response(content)

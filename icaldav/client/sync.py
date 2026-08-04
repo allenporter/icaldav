@@ -43,19 +43,16 @@ RFC References:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
-import logging
 
-
-import aiohttp
 from ical.calendar import Calendar
 from ical.calendar_stream import CalendarStream
 from ical.exceptions import CalendarError
 
 from icaldav.client.client import CalDavClient
 from icaldav.client.exceptions import CalDavError
-
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
@@ -63,7 +60,6 @@ from icaldav.store.types import (
     ResourcePath,
 )
 from icaldav.xml.report.models import ReportResource
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,14 +93,6 @@ class SyncResult:
     deleted: int
     unmodified: int
     sync_token: str | None
-
-
-def _normalize_href(href: str) -> str:
-    """Normalize URI href path for uniform dictionary lookup and storage."""
-    href = href.strip()
-    if not href.startswith("/"):
-        href = "/" + href
-    return href.rstrip("/") if href != "/" else href
 
 
 class CalDavSyncManager:
@@ -148,12 +136,7 @@ class CalDavSyncManager:
         if not force_full_sync:
             try:
                 return await self._sync_via_sync_collection()
-            except (
-                CalDavError,
-                aiohttp.ClientError,
-                KeyError,
-                ValueError,
-            ) as err:
+            except CalDavError as err:
                 _LOGGER.debug(
                     "RFC 6578 sync-collection failed or unsupported (%s); falling back to ETag diff",
                     err,
@@ -166,12 +149,14 @@ class CalDavSyncManager:
     async def _sync_via_sync_collection(self) -> SyncResult:
         """Execute incremental sync using RFC 6578 WebDAV Collection Synchronization."""
         stored_token = await self.store.get_sync_token(self.collection_path) or ""
-        results = await self.client.sync_collection(
+        results, server_token = await self.client.sync_collection(
             self.collection_url, sync_token=stored_token
         )
 
         local_etags = await self.store.get_etags(self.collection_path)
-        local_etags_norm = {_normalize_href(k): v for k, v in local_etags.items()}
+        local_etags_norm = {
+            ResourcePath.parse(k).canonical: v for k, v in local_etags.items()
+        }
 
         added = 0
         updated = 0
@@ -203,6 +188,7 @@ class CalDavSyncManager:
                 if item.ics_data:
                     items_to_save.append(item)
 
+        # TODO: Support batch store operations (save_resources / delete_resources) in LocalStore
         for item in items_to_save:
             resource = CalendarResource(
                 path=item.resource_path,
@@ -220,7 +206,7 @@ class CalDavSyncManager:
 
             await self.store.save_resource(resource)
 
-        new_token = f"sync-token-{len(local_etags) + added - deleted}"
+        new_token = server_token or f"sync-token-{len(local_etags) + added - deleted}"
         await self.store.set_sync_token(self.collection_path, new_token)
 
         return SyncResult(
@@ -238,31 +224,34 @@ class CalDavSyncManager:
             self.collection_url, depth=1, props=["getetag", "resourcetype"]
         )
 
-        # Filter out collection items
-        remote_etags: dict[str, str] = {}
-        for item in items:
-            if not item.is_collection and item.normalized_etag is not None:
-                remote_etags[item.normalized_href] = item.normalized_etag
+        remote_etags: dict[str, str] = {
+            item.normalized_href: item.normalized_etag
+            for item in items
+            if not item.is_collection and item.normalized_etag is not None
+        }
 
         local_etags = await self.store.get_etags(self.collection_path)
-        local_etags_norm = {_normalize_href(k): v for k, v in local_etags.items()}
+        local_etags_norm = {
+            ResourcePath.parse(k).canonical: v for k, v in local_etags.items()
+        }
 
         to_fetch: list[str] = []
-        to_delete: list[str] = []
+        to_delete: list[ResourcePath] = []
         unmodified = 0
 
         for norm_href, r_etag in remote_etags.items():
-            if norm_href not in local_etags_norm:
-                to_fetch.append(norm_href)
-            elif local_etags_norm[norm_href] != r_etag:
+            if (
+                norm_href not in local_etags_norm
+                or local_etags_norm[norm_href] != r_etag
+            ):
                 to_fetch.append(norm_href)
             else:
                 unmodified += 1
 
-        for original_href, _ in local_etags.items():
-            norm_key = _normalize_href(original_href)
-            if norm_key not in remote_etags:
-                to_delete.append(original_href)
+        for local_key in local_etags:
+            local_path = ResourcePath.parse(local_key)
+            if local_path.canonical not in remote_etags:
+                to_delete.append(local_path)
 
         added = 0
         updated = 0
@@ -271,24 +260,27 @@ class CalDavSyncManager:
             fetched_resources = await self.client.calendar_multiget(
                 self.collection_url, hrefs=to_fetch
             )
+            # TODO: Support batch store operations (save_resources / delete_resources) in LocalStore
             for item in fetched_resources:
-                if item.ics_data:
-                    if item.normalized_href not in local_etags_norm:
-                        added += 1
-                    else:
-                        updated += 1
+                if not item.ics_data:
+                    continue
 
-                    res = CalendarResource(
-                        path=item.resource_path,
-                        etag=item.normalized_etag,
-                        ics_data=item.ics_data,
-                        uid=item.extracted_uid,
-                    )
-                    await self.store.save_resource(res)
+                if item.normalized_href not in local_etags_norm:
+                    added += 1
+                else:
+                    updated += 1
+
+                res = CalendarResource(
+                    path=item.resource_path,
+                    etag=item.normalized_etag,
+                    ics_data=item.ics_data,
+                    uid=item.extracted_uid,
+                )
+                await self.store.save_resource(res)
 
         deleted = 0
-        for href_to_del in to_delete:
-            if await self.store.delete_resource(ResourcePath.parse(href_to_del)):
+        for path_to_del in to_delete:
+            if await self.store.delete_resource(path_to_del):
                 deleted += 1
 
         new_token = f"etag-sync-token-{len(remote_etags)}"
@@ -309,12 +301,11 @@ class CalDavSyncManager:
         Returns:
             An ical.calendar.Calendar containing all parsed events, tasks, and journals.
         """
-        resources = await self.store.get_resources(self.collection_path)
-        if not resources:
-            return Calendar()
-
         merged_cal = Calendar()
+        resources = await self.store.get_resources(self.collection_path)
         for res in resources:
+            if not res.ics_data:
+                continue
             try:
                 stream = CalendarStream.from_ics(res.ics_data)
                 for parsed_cal in stream.calendars:
@@ -328,7 +319,6 @@ class CalDavSyncManager:
                 _LOGGER.warning(
                     "Failed to parse resource %s into Calendar",
                     res.href,
-                    exc_info=True,
                 )
 
         return merged_cal

@@ -8,23 +8,21 @@ RFC References:
     - RFC 4791: CalDAV Extensions.
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
-from aiohttp.test_utils import TestClient, TestServer
 import pytest
+from aiohttp.test_utils import TestClient, TestServer
 
 from icaldav.client.client import CalDavClient
 from icaldav.client.sync import (
     CalDavSyncManager,
     SyncPath,
-    _normalize_href,
 )
-
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
+from icaldav.store.types import ResourcePath
 from icaldav.xml.report.models import ReportResource
-
 
 SAMPLE_ICS_1 = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -76,7 +74,7 @@ class LoopbackHarness:
 
 
 @pytest.fixture
-async def harness() -> AsyncGenerator[LoopbackHarness, None]:
+async def harness() -> AsyncGenerator[LoopbackHarness]:
     """Pytest fixture setting up real server, client, and memory stores for in-process loopback testing."""
     server_store = MemoryStore()
     await server_store.create_collection("/work")
@@ -110,9 +108,9 @@ def test_extract_uid_and_normalize_href() -> None:
     res_no_uid = ReportResource(href="/test.ics", etag="1", ics_data="NO UID HERE")
     assert res_no_uid.extracted_uid is None
 
-    assert _normalize_href("work/meeting.ics") == "/work/meeting.ics"
-    assert _normalize_href("/work/meeting.ics/") == "/work/meeting.ics"
-    assert _normalize_href("/") == "/"
+    assert ResourcePath.parse("work/meeting.ics").canonical == "/work/meeting.ics"
+    assert ResourcePath.parse("/work/meeting.ics/").canonical == "/work/meeting.ics"
+    assert ResourcePath.parse("/").canonical == "/"
 
 
 @pytest.mark.asyncio
