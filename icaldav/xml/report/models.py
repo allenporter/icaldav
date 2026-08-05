@@ -5,13 +5,21 @@ RFC Reference:
     - RFC 4791 Section 7.9: CALDAV:calendar-multiget REPORT.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from functools import cached_property
+import re
+
+
 from icaldav.filter import CompFilter
+from icaldav.store.types import ResourcePath
 
 
 @dataclass
 class CalendarQueryRequest:
     """Parsed representation of a <C:calendar-query> REPORT request body (RFC 4791 §7.8).
+
 
     Attributes:
         props: List of property local names requested by the client.
@@ -48,6 +56,31 @@ class ReportResource:
     href: str
     etag: str
     ics_data: str | None = None
+
+    @cached_property
+    def normalized_etag(self) -> str:
+        """Return the entity tag stripped of surrounding quotes."""
+        return self.etag.strip('"')
+
+    @cached_property
+    def resource_path(self) -> ResourcePath:
+        """Return the strongly-typed ResourcePath object for this resource."""
+        return ResourcePath.parse(self.href)
+
+    @cached_property
+    def normalized_href(self) -> str:
+        """Return the canonical normalized URI href string for this resource."""
+        return self.resource_path.canonical
+
+    @cached_property
+    def extracted_uid(self) -> str | None:
+        """Extract iCalendar UID from raw ics_data using regex."""
+        if not self.ics_data:
+            return None
+        match_obj = re.search(
+            r"^UID:(.+)$", self.ics_data, re.MULTILINE | re.IGNORECASE
+        )
+        return match_obj.group(1).strip() if match_obj else None
 
 
 @dataclass

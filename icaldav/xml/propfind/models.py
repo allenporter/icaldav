@@ -5,11 +5,16 @@ RFC Reference:
     - RFC 4918 Section 14.24: DAV:response Element.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import cached_property
 from typing import Any
 
+
 from icaldav.store.principal import PrincipalInfo
+from icaldav.store.types import ResourcePath
 
 
 class ResourceKind(StrEnum):
@@ -112,3 +117,19 @@ class PropfindItem:
             if ps.status_code == 200 and "getetag" in ps.properties:
                 return ps.properties["getetag"]
         return None
+
+    @cached_property
+    def normalized_etag(self) -> str | None:
+        """Return the DAV:getetag property value stripped of surrounding quotes."""
+        raw = self.etag
+        return raw.strip('"') if raw is not None else None
+
+    @cached_property
+    def resource_path(self) -> ResourcePath:
+        """Return the strongly-typed ResourcePath object for this item."""
+        return ResourcePath.parse(self.href)
+
+    @cached_property
+    def normalized_href(self) -> str:
+        """Return the canonical normalized URI href string for this item."""
+        return self.resource_path.canonical

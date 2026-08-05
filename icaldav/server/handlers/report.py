@@ -13,7 +13,8 @@ from aiohttp import web
 from icaldav.filter import matches_comp_filter
 from icaldav.server.handlers.decorators import path_args
 from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
-from icaldav.store.types import LocalStore
+from icaldav.store.types import CollectionPath, LocalStore, ResourcePath
+
 from icaldav.xml.namespaces import DAV, qname, strip_ns
 from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.response import append_propfind_response
@@ -71,16 +72,14 @@ class ReportHandler:
     async def _handle_sync_collection(
         self, collection_id: str, body_bytes: bytes
     ) -> web.Response:
-        """Evaluate a sync-collection REPORT (RFC 6578).
-
-        TODO(RFC 6578 §3.7): Full sync pagination and truncation support.
-        Currently, this handler returns all matched resources in a single response.
-        If a client requests pagination via <DAV:limit><DAV:nresults>, or if a collection
-        is very large, the server should return partial sync tokens per page until complete.
-        """
+        """Evaluate a sync-collection REPORT (RFC 6578)."""
         req = parse_sync_collection(body_bytes)
-        etags = await self.store.get_etags(collection_id)
-        matched = [ReportResource(href=href, etag=etag) for href, etag in etags.items()]
+        coll = CollectionPath.parse(f"/{collection_id}" if collection_id else "/")
+        resources = await self.store.get_resources(coll)
+        matched = [
+            ReportResource(href=res.href, etag=res.etag, ics_data=res.ics_data)
+            for res in resources
+        ]
         if req.limit is not None and req.limit > 0:
             matched = matched[: req.limit]
 
@@ -132,7 +131,8 @@ class ReportHandler:
     ) -> web.Response:
         """Evaluate a calendar-query REPORT against stored resources."""
         query = parse_calendar_query(body_bytes)
-        all_resources = await self.store.get_resources(collection_id)
+        coll = CollectionPath.parse(f"/{collection_id}" if collection_id else "/")
+        all_resources = await self.store.get_resources(coll)
 
         include_data = "calendar-data" in query.props
         matched = []
@@ -164,7 +164,7 @@ class ReportHandler:
         found = []
         missing = []
         for href in multiget.hrefs:
-            resource = await self.store.get_resource(collection_id, href)
+            resource = await self.store.get_resource(ResourcePath.parse(href))
             if resource:
                 found.append(
                     ReportResource(

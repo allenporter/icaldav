@@ -1,23 +1,26 @@
 """Unit tests for storage data structures and PropfindItem properties."""
 
-from icaldav.store.types import CalendarResource
+from icaldav.store.types import CalendarResource, CollectionPath, ResourcePath
 from icaldav.xml.propfind.models import PropfindItem, Propstat
 
 
 def test_calendar_resource_creation() -> None:
     """Test CalendarResource attributes and defaults."""
     res = CalendarResource(
-        href="/work/event1.ics",
+        path=ResourcePath.parse("/work/event1.ics"),
         etag="etag123",
         ics_data="BEGIN:VCALENDAR\r\nEND:VCALENDAR",
     )
     assert res.href == "/work/event1.ics"
+    assert res.path.canonical == "/work/event1.ics"
+    assert res.path.collection_path == CollectionPath.parse("/work")
+    assert res.path.filename == "event1.ics"
     assert res.etag == "etag123"
     assert res.ics_data == "BEGIN:VCALENDAR\r\nEND:VCALENDAR"
     assert res.uid is None
 
     res_with_uid = CalendarResource(
-        href="/work/event2.ics",
+        path=ResourcePath.parse("/work/event2.ics"),
         etag="etag456",
         ics_data="BEGIN:VCALENDAR\r\nEND:VCALENDAR",
         uid="uid-123",

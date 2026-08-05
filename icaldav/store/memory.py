@@ -3,7 +3,14 @@
 Provides fast, transient storage for testing and in-memory calendar caching.
 """
 
-from icaldav.store.types import CalendarResource, LocalStore
+from __future__ import annotations
+
+from icaldav.store.types import (
+    CalendarResource,
+    CollectionPath,
+    LocalStore,
+    ResourcePath,
+)
 
 
 class MemoryStore(LocalStore):
@@ -15,115 +22,66 @@ class MemoryStore(LocalStore):
 
     def __init__(self) -> None:
         """Initialize empty in-memory collections and sync tokens."""
-        # collection_id -> {href -> CalendarResource}
-        self._resources: dict[str, dict[str, CalendarResource]] = {}
-        # collection_id -> sync_token
-        self._tokens: dict[str, str] = {}
+        # CollectionPath -> {ResourcePath -> CalendarResource}
+        self._resources: dict[CollectionPath, dict[ResourcePath, CalendarResource]] = {}
+        # CollectionPath -> sync_token
+        self._tokens: dict[CollectionPath, str] = {}
 
-    async def get_sync_token(self, collection_id: str) -> str | None:
-        """Retrieve the latest DAV:sync-token for a given calendar collection.
+    async def get_sync_token(self, collection: CollectionPath | str) -> str | None:
+        """Retrieve the latest DAV:sync-token for a given CollectionPath."""
+        coll = CollectionPath.parse(collection)
+        return self._tokens.get(coll)
 
-        Args:
-            collection_id: Identifier for the calendar collection.
-
-        Returns:
-            The sync token string if set, otherwise None.
-        """
-        return self._tokens.get(collection_id)
-
-    async def set_sync_token(self, collection_id: str, token: str) -> None:
-        """Store or update the DAV:sync-token for a given calendar collection.
-
-        Args:
-            collection_id: Identifier for the calendar collection.
-            token: The new sync token string.
-        """
-        self._tokens[collection_id] = token
-
-    async def get_etags(self, collection_id: str) -> dict[str, str]:
-        """Retrieve a mapping of resource href to etag for all items in a collection.
-
-        Args:
-            collection_id: Identifier for the calendar collection.
-
-        Returns:
-            A dictionary mapping href to etag.
-        """
-        collection = self._resources.get(collection_id, {})
-        return {href: res.etag for href, res in collection.items()}
-
-    async def get_resource(
-        self, collection_id: str, href: str
-    ) -> CalendarResource | None:
-        """Retrieve a single calendar resource by collection ID and href.
-
-        Args:
-            collection_id: Identifier for the calendar collection.
-            href: The relative URI path of the resource.
-
-        Returns:
-            The CalendarResource if found, or None.
-        """
-        collection = self._resources.get(collection_id, {})
-        return collection.get(href)
-
-    async def save_resource(
-        self, collection_id: str, resource: CalendarResource
+    async def set_sync_token(
+        self, collection: CollectionPath | str, token: str
     ) -> None:
-        """Save or overwrite a calendar object resource in local memory.
+        """Store or update the DAV:sync-token for a given CollectionPath."""
+        coll = CollectionPath.parse(collection)
+        self._tokens[coll] = token
 
-        Args:
-            collection_id: Identifier for the calendar collection.
-            resource: The CalendarResource object to persist.
-        """
-        if collection_id not in self._resources:
-            self._resources[collection_id] = {}
+    async def get_etags(self, collection: CollectionPath | str) -> dict[str, str]:
+        """Retrieve a mapping of resource href string to etag for all items in a CollectionPath."""
+        coll = CollectionPath.parse(collection)
+        resources = self._resources.get(coll, {})
+        return {res.href: res.etag for res in resources.values()}
 
-        self._resources[collection_id][resource.href] = resource
+    async def get_resource(self, path: ResourcePath | str) -> CalendarResource | None:
+        """Retrieve a single calendar resource by its ResourcePath."""
+        res_path = ResourcePath.parse(path)
+        collection = self._resources.get(res_path.collection_path, {})
+        return collection.get(res_path)
 
-    async def delete_resource(self, collection_id: str, href: str) -> bool:
-        """Delete a calendar object resource from local memory.
+    async def save_resource(self, resource: CalendarResource) -> None:
+        """Save or overwrite a calendar object resource in local memory."""
+        coll_path = resource.path.collection_path
+        if coll_path not in self._resources:
+            self._resources[coll_path] = {}
 
-        Args:
-            collection_id: Identifier for the calendar collection.
-            href: Relative URI path of the resource.
+        self._resources[coll_path][resource.path] = resource
 
-        Returns:
-            True if deleted, False if resource did not exist.
-        """
-        collection = self._resources.get(collection_id)
-        if collection and href in collection:
-            del collection[href]
+    async def delete_resource(self, path: ResourcePath | str) -> bool:
+        """Delete a calendar object resource from local memory by its ResourcePath."""
+        res_path = ResourcePath.parse(path)
+        collection = self._resources.get(res_path.collection_path)
+        if collection and res_path in collection:
+            del collection[res_path]
             return True
         return False
 
-    async def get_resources(self, collection_id: str) -> list[CalendarResource]:
-        """Retrieve all calendar resources in a collection.
+    async def get_resources(
+        self, collection: CollectionPath | str
+    ) -> list[CalendarResource]:
+        """Retrieve all calendar resources in a CollectionPath."""
+        coll = CollectionPath.parse(collection)
+        return list(self._resources.get(coll, {}).values())
 
-        Args:
-            collection_id: Identifier for the calendar collection.
+    async def collection_exists(self, collection: CollectionPath | str) -> bool:
+        """Check whether a CollectionPath exists in the store."""
+        coll = CollectionPath.parse(collection)
+        return coll in self._resources
 
-        Returns:
-            List of all CalendarResource objects in the collection.
-        """
-        return list(self._resources.get(collection_id, {}).values())
-
-    async def collection_exists(self, collection_id: str) -> bool:
-        """Check whether a calendar collection exists in the store.
-
-        Args:
-            collection_id: Identifier for the calendar collection.
-
-        Returns:
-            True if the collection exists, False otherwise.
-        """
-        return collection_id in self._resources
-
-    async def create_collection(self, collection_id: str) -> None:
-        """Create a new empty calendar collection.
-
-        Args:
-            collection_id: Identifier for the new calendar collection.
-        """
-        if collection_id not in self._resources:
-            self._resources[collection_id] = {}
+    async def create_collection(self, collection: CollectionPath | str) -> None:
+        """Create a new empty calendar collection."""
+        coll = CollectionPath.parse(collection)
+        if coll not in self._resources:
+            self._resources[coll] = {}

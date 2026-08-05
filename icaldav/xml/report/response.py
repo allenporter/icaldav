@@ -97,3 +97,29 @@ def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
             resources.append(ReportResource(href=href, etag=etag, ics_data=ics_data))
 
     return resources
+
+
+def parse_sync_collection_response(
+    xml_bytes: bytes,
+) -> tuple[list[ReportResource], str | None]:
+    """Parse a 207 Multi-Status XML response from an RFC 6578 sync-collection REPORT.
+
+    Returns:
+        Tuple of (resources list, server sync token if present).
+    """
+    resources = parse_report_response(xml_bytes)
+    if not xml_bytes or not xml_bytes.strip():
+        return resources, None
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return resources, None
+
+    sync_token: str | None = None
+    for child in root:
+        if strip_ns(child.tag) == "sync-token" and child.text:
+            sync_token = child.text.strip()
+            break
+
+    return resources, sync_token

@@ -74,7 +74,7 @@ async def test_report_sync_collection() -> None:
     app = create_app(store)
     async with TestClient(TestServer(app)) as test_client:
         async with CalDavClient(session=test_client.session) as caldav_client:
-            resources = await caldav_client.sync_collection(
+            resources, _ = await caldav_client.sync_collection(
                 url=str(test_client.make_url("/work/")),
                 sync_token="http://icaldav.org/ns/sync-tokens/1",
             )
