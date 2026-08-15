@@ -1,11 +1,10 @@
 """Unit tests for the icaldav CLI module."""
 
 from pathlib import Path
-
-from aiohttp.test_utils import TestClient, TestServer
-import pytest
-
 from unittest.mock import patch
+
+import pytest
+from aiohttp.test_utils import TestClient, TestServer
 
 from icaldav.cli import build_parser, main, main_async
 from icaldav.client.auth import AuthStore
@@ -116,45 +115,44 @@ async def test_cli_client_commands_integration(
     store = MemoryStore()
     app = create_app(store)
 
-    async with TestServer(app) as server:
-        async with TestClient(server):
-            base_url = str(server.make_url("/work"))
+    async with TestServer(app) as server, TestClient(server):
+        base_url = str(server.make_url("/work"))
 
-            # 1. propfind empty collection
-            code = await main_async(["client", "propfind", base_url])
-            assert code == 0
-            captured = capsys.readouterr()
-            assert "PROPFIND Response" in captured.out
+        # 1. propfind empty collection
+        code = await main_async(["client", "propfind", base_url])
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "PROPFIND Response" in captured.out
 
-            # 2. put calendar resource file
-            ics_file = tmp_path / "meeting.ics"
-            ics_file.write_text(
-                "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:999\r\nEND:VEVENT\r\nEND:VCALENDAR",
-                encoding="utf-8",
-            )
-            event_url = f"{base_url}/meeting.ics"
-            code = await main_async(["client", "put", event_url, str(ics_file)])
-            assert code == 0
-            captured = capsys.readouterr()
-            assert "Successfully uploaded" in captured.out
+        # 2. put calendar resource file
+        ics_file = tmp_path / "meeting.ics"
+        ics_file.write_text(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:999\r\nEND:VEVENT\r\nEND:VCALENDAR",
+            encoding="utf-8",
+        )
+        event_url = f"{base_url}/meeting.ics"
+        code = await main_async(["client", "put", event_url, str(ics_file)])
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "Successfully uploaded" in captured.out
 
-            # 3. get calendar resource
-            code = await main_async(["client", "get", event_url])
-            assert code == 0
-            captured = capsys.readouterr()
-            assert "UID:999" in captured.out
+        # 3. get calendar resource
+        code = await main_async(["client", "get", event_url])
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "UID:999" in captured.out
 
-            # 4. delete calendar resource
-            code = await main_async(["client", "delete", event_url])
-            assert code == 0
-            captured = capsys.readouterr()
-            assert "Successfully deleted" in captured.out
+        # 4. delete calendar resource
+        code = await main_async(["client", "delete", event_url])
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "Successfully deleted" in captured.out
 
-            # 5. store inspect
-            code = await main_async(["store", "inspect"])
-            assert code == 0
-            captured = capsys.readouterr()
-            assert "Store Inspection" in captured.out
+        # 5. store inspect
+        code = await main_async(["store", "inspect"])
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "Store Inspection" in captured.out
 
 
 def test_cli_parser_auth_probe() -> None:

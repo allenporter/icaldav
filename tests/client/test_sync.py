@@ -21,8 +21,7 @@ from icaldav.client.sync import (
 )
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
-from icaldav.store.types import ResourcePath
-from icaldav.xml.report.models import ReportResource
+from icaldav.store.types import ReportResource, ResourcePath
 
 SAMPLE_ICS_1 = """BEGIN:VCALENDAR
 VERSION:2.0

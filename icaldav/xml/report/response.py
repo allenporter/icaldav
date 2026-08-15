@@ -5,25 +5,39 @@ RFC Reference:
     - RFC 4791 Section 9.5: CALDAV:calendar-data XML Element.
 """
 
-from __future__ import annotations
-
 import logging
 import xml.etree.ElementTree as ET
 
+from icaldav.engine.models import ReportMultiStatus
+from icaldav.store.types import ReportResource
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
-from icaldav.xml.report.models import ReportResource
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def build_report_response(
-    resources: list[ReportResource],
+    resources: list[ReportResource] | ReportMultiStatus,
     missing_hrefs: list[str] | None = None,
 ) -> bytes:
-    """Build a 207 Multi-Status XML response body for a REPORT result."""
+    """Build a 207 Multi-Status XML response body for a REPORT result.
+
+    Args:
+        resources: Either a list of ReportResource objects or a ReportMultiStatus IR object.
+        missing_hrefs: Optional list of missing resource URIs (if passing a resources list).
+
+    Returns:
+        Encoded UTF-8 XML byte string representation of the Multi-Status response.
+    """
+    if isinstance(resources, ReportMultiStatus):
+        res_list = resources.responses
+        missing_list = resources.missing_hrefs
+    else:
+        res_list = resources
+        missing_list = missing_hrefs or []
+
     root = ET.Element(qname(DAV, "multistatus"))
 
-    for resource in resources:
+    for resource in res_list:
         resp = ET.SubElement(root, qname(DAV, "response"))
         href_elem = ET.SubElement(resp, qname(DAV, "href"))
         href_elem.text = resource.href
@@ -42,7 +56,7 @@ def build_report_response(
         status = ET.SubElement(propstat, qname(DAV, "status"))
         status.text = "HTTP/1.1 200 OK"
 
-    for href in missing_hrefs or []:
+    for href in missing_list:
         resp = ET.SubElement(root, qname(DAV, "response"))
         href_elem = ET.SubElement(resp, qname(DAV, "href"))
         href_elem.text = href

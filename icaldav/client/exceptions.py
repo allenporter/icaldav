@@ -6,7 +6,7 @@ RFC References:
   - RFC 6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage.
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 
 class CalDavError(Exception):

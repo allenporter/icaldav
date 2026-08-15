@@ -16,7 +16,6 @@ from icaldav.client.client import CalDavClient
 from icaldav.server.router import create_app
 from icaldav.store.memory import MemoryStore
 
-
 VEVENT_JULY = (
     "BEGIN:VCALENDAR\r\n"
     "VERSION:2.0\r\n"

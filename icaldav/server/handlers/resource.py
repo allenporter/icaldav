@@ -7,6 +7,7 @@ RFC Reference:
 """
 
 import hashlib
+
 from aiohttp import web
 
 from icaldav.server.handlers.decorators import path_args

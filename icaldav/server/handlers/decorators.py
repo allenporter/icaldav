@@ -1,7 +1,9 @@
 """Server handler decorators for aiohttp request processing."""
 
+from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import Any, Callable, Coroutine
+from typing import Any
+
 from aiohttp import web
 
 
