@@ -8,52 +8,10 @@ RFC Reference:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from functools import cached_property
 from typing import Any
 
-
-from icaldav.store.principal import PrincipalInfo
-from icaldav.store.types import ResourcePath
-
-
-class ResourceKind(StrEnum):
-    """Resource entity classification provided directly by handlers (RFC 3744, RFC 4918, RFC 4791)."""
-
-    PRINCIPAL = "principal"
-    """WebDAV Principal resource (RFC 3744 §4.1)."""
-
-    ROOT = "root"
-    """Root WebDAV collection container (RFC 4918 §14.24)."""
-
-    CALENDAR = "calendar"
-    """CalDAV Calendar collection (RFC 4791 §4.2)."""
-
-    RESOURCE = "resource"
-    """Individual calendar object resource / file (RFC 4791 §9.6)."""
-
-
-@dataclass(frozen=True)
-class ResourceTarget:
-    """Domain model capturing target resource context for WebDAV property responses.
-
-    Attributes:
-        href: Canonical relative URI path string (e.g. "/", "/principals/user/", "/work/").
-        kind: Explicit ResourceKind classification provided directly by the handler.
-        displayname: Optional human-readable display name string.
-        etag: Optional entity tag string for cache control.
-        ctag: Optional collection change tag string for fast client sync diffing.
-        sync_token: Optional synchronization token URI for RFC 6578 WebDAV Sync.
-        principal: Optional PrincipalInfo metadata object for WebDAV autodiscovery properties.
-    """
-
-    href: str
-    kind: ResourceKind
-    displayname: str | None = None
-    etag: str | None = None
-    ctag: str | None = None
-    sync_token: str | None = None
-    principal: PrincipalInfo | None = None
+from icaldav.store.types import ResourceKind, ResourcePath, ResourceTarget  # noqa: F401
 
 
 @dataclass

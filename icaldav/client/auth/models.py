@@ -5,16 +5,13 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiohttp
 from mashumaro.mixins.json import DataClassJSONMixin
 
 from icaldav.client.auth.oauth.config import OAuthConfig
 from icaldav.client.auth.oauth.session import OAuthSession
-
-if TYPE_CHECKING:
-    pass
 
 
 class AuthScheme(str, Enum):

@@ -12,15 +12,16 @@ RFC References:
 """
 
 import warnings
+from typing import Self
 
 import aiohttp
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.exceptions import CalDavAuthError
+from icaldav.store.types import ReportResource
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
 from icaldav.xml.propfind.response import parse_multistatus_xml
-from icaldav.xml.report.models import ReportResource
 from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,
@@ -116,7 +117,7 @@ class CalDavClient:
             await self._session.close()
             self._session = None
 
-    async def __aenter__(self) -> "CalDavClient":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:

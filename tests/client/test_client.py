@@ -1,8 +1,8 @@
 """Unit tests for CalDavClient public interface and authentication."""
 
+import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-import pytest
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.client import CalDavClient
@@ -17,13 +17,12 @@ async def test_client_context_manager() -> None:
     store = MemoryStore()
     app = create_app(store)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as test_client:
-            async with CalDavClient(session=test_client.session) as client:
-                url = str(server.make_url("/work"))
-                items = await client.propfind(url, depth=0)
-                assert len(items) == 1
-                assert items[0].is_collection is True
+    async with TestServer(app) as server, TestClient(server) as test_client:
+        async with CalDavClient(session=test_client.session) as client:
+            url = str(server.make_url("/work"))
+            items = await client.propfind(url, depth=0)
+            assert len(items) == 1
+            assert items[0].is_collection is True
 
 
 @pytest.mark.asyncio
@@ -39,18 +38,17 @@ async def test_client_auth_error_challenge_parsing() -> None:
     app = web.Application()
     app.router.add_route("PROPFIND", "/protected", handle_401)
 
-    async with TestServer(app) as server:
-        async with TestClient(server) as test_client:
-            async with CalDavClient(session=test_client.session) as client:
-                url = str(server.make_url("/protected"))
-                with pytest.raises(CalDavAuthError) as exc_info:
-                    await client.propfind(url)
+    async with TestServer(app) as server, TestClient(server) as test_client:
+        async with CalDavClient(session=test_client.session) as client:
+            url = str(server.make_url("/protected"))
+            with pytest.raises(CalDavAuthError) as exc_info:
+                await client.propfind(url)
 
-                err = exc_info.value
-                assert err.status == 401
-                assert err.url == url
-                assert len(err.challenges) > 0
-                assert "Basic" in err.parse_schemes(err.challenges)
+            err = exc_info.value
+            assert err.status == 401
+            assert err.url == url
+            assert len(err.challenges) > 0
+            assert "Basic" in err.parse_schemes(err.challenges)
 
 
 @pytest.mark.asyncio

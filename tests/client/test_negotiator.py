@@ -1,8 +1,9 @@
 """Unit tests for authentication negotiation and server probing."""
 
+from unittest.mock import patch
+
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-from unittest.mock import patch
 
 from icaldav.client.negotiator import (
     KNOWN_OAUTH_ISSUERS,

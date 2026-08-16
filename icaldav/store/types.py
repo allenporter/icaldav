@@ -7,11 +7,15 @@ RFC References:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import cached_property
 from typing import Protocol
 
 from yarl import URL
+
+from icaldav.store.principal import PrincipalInfo
 
 
 @dataclass(frozen=True)
@@ -21,7 +25,7 @@ class CollectionPath:
     path: str
 
     @classmethod
-    def parse(cls, raw: str | "CollectionPath") -> "CollectionPath":
+    def parse(cls, raw: str | CollectionPath) -> CollectionPath:
         """Factory creating a CollectionPath from a string or existing CollectionPath."""
         if isinstance(raw, CollectionPath):
             return raw
@@ -50,7 +54,7 @@ class ResourcePath:
     path: str
 
     @classmethod
-    def parse(cls, raw: str | "ResourcePath") -> "ResourcePath":
+    def parse(cls, raw: str | ResourcePath) -> ResourcePath:
         """Factory creating a ResourcePath from a string or existing ResourcePath."""
         if isinstance(raw, ResourcePath):
             return raw
@@ -238,3 +242,75 @@ class LocalStore(Protocol):
             collection: CollectionPath object for the new calendar collection.
         """
         ...
+
+
+class ResourceKind(StrEnum):
+    """Resource entity classification for WebDAV/CalDAV resources."""
+
+    PRINCIPAL = "principal"
+    ROOT = "root"
+    CALENDAR = "calendar"
+    RESOURCE = "resource"
+
+
+@dataclass(frozen=True)
+class ResourceTarget:
+    """Domain model capturing target resource context for WebDAV property responses.
+
+    Attributes:
+        href: Canonical relative URI path string (e.g. "/", "/principals/user/", "/work/").
+        kind: Explicit ResourceKind classification.
+        displayname: Optional human-readable display name string.
+        etag: Optional entity tag string for cache control.
+        ctag: Optional collection change tag string for fast client sync diffing.
+        sync_token: Optional synchronization token URI for RFC 6578 WebDAV Sync.
+        principal: Optional PrincipalInfo metadata object for WebDAV autodiscovery properties.
+    """
+
+    href: str
+    kind: ResourceKind
+    displayname: str | None = None
+    etag: str | None = None
+    ctag: str | None = None
+    sync_token: str | None = None
+    principal: PrincipalInfo | None = None
+
+
+@dataclass
+class ReportResource:
+    """A single resource entry in a REPORT 207 Multi-Status response.
+
+    Attributes:
+        href: Resource URI path.
+        etag: Entity tag for version tracking.
+        ics_data: Raw iCalendar content, if requested via calendar-data property.
+    """
+
+    href: str
+    etag: str
+    ics_data: str | None = None
+
+    @cached_property
+    def normalized_etag(self) -> str:
+        """Return the entity tag stripped of surrounding quotes."""
+        return self.etag.strip('"')
+
+    @cached_property
+    def resource_path(self) -> ResourcePath:
+        """Return the strongly-typed ResourcePath object for this resource."""
+        return ResourcePath.parse(self.href)
+
+    @cached_property
+    def normalized_href(self) -> str:
+        """Return the canonical normalized URI href string for this resource."""
+        return self.resource_path.canonical
+
+    @cached_property
+    def extracted_uid(self) -> str | None:
+        """Extract iCalendar UID from raw ics_data using regex."""
+        if not self.ics_data:
+            return None
+        match_obj = re.search(
+            r"^UID:(.+)$", self.ics_data, re.MULTILINE | re.IGNORECASE
+        )
+        return match_obj.group(1).strip() if match_obj else None

@@ -1,7 +1,7 @@
 """CalDAV client authentication, credential persistence, negotiation, and OAuth support."""
 
 from icaldav.client.auth.models import AuthMethod, AuthProfile, AuthScheme
-from icaldav.client.auth.negotiator import AuthNegotiator, KNOWN_OAUTH_ISSUERS
+from icaldav.client.auth.negotiator import KNOWN_OAUTH_ISSUERS, AuthNegotiator
 from icaldav.client.auth.oauth import (
     OAuthConfig,
     OAuthSession,

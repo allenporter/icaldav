@@ -4,4 +4,17 @@ extend-exclude = ["*.ipynb"]
 [lint]
 preview = true
 ignore = ["E501", "RUF022"]
-extend-select = ["PLC0415"]
+extend-select = ["PLC0415", "C901"]
+
+[lint.mccabe]
+max-complexity = 8
+
+[lint.per-file-ignores]
+"icaldav/client/sync.py" = ["C901"]
+"icaldav/filter.py" = ["C901"]
+"icaldav/cli.py" = ["C901"]
+"script/check-architecture" = ["C901"]
+"script/check-rfc-coverage" = ["C901"]
+"icaldav/xml/propfind/response.py" = ["C901"]
+"icaldav/xml/report/request.py" = ["C901"]
+"icaldav/xml/report/response.py" = ["C901"]

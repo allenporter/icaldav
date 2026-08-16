@@ -8,12 +8,9 @@ RFC Reference:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cached_property
-import re
-
 
 from icaldav.filter import CompFilter
-from icaldav.store.types import ResourcePath
+from icaldav.store.types import ReportResource  # noqa: F401
 
 
 @dataclass
@@ -41,46 +38,6 @@ class CalendarMultigetRequest:
 
     props: list[str]
     hrefs: list[str]
-
-
-@dataclass
-class ReportResource:
-    """A single resource entry in a REPORT 207 Multi-Status response.
-
-    Attributes:
-        href: Resource URI path.
-        etag: Entity tag for version tracking.
-        ics_data: Raw iCalendar content, if requested via calendar-data property.
-    """
-
-    href: str
-    etag: str
-    ics_data: str | None = None
-
-    @cached_property
-    def normalized_etag(self) -> str:
-        """Return the entity tag stripped of surrounding quotes."""
-        return self.etag.strip('"')
-
-    @cached_property
-    def resource_path(self) -> ResourcePath:
-        """Return the strongly-typed ResourcePath object for this resource."""
-        return ResourcePath.parse(self.href)
-
-    @cached_property
-    def normalized_href(self) -> str:
-        """Return the canonical normalized URI href string for this resource."""
-        return self.resource_path.canonical
-
-    @cached_property
-    def extracted_uid(self) -> str | None:
-        """Extract iCalendar UID from raw ics_data using regex."""
-        if not self.ics_data:
-            return None
-        match_obj = re.search(
-            r"^UID:(.+)$", self.ics_data, re.MULTILINE | re.IGNORECASE
-        )
-        return match_obj.group(1).strip() if match_obj else None
 
 
 @dataclass

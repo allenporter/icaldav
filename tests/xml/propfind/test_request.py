@@ -2,6 +2,7 @@
 
 from syrupy.assertion import SnapshotAssertion
 
+from icaldav.engine.models import PropertyTag
 from icaldav.xml.namespaces import CALDAV, DAV
 from icaldav.xml.propfind.request import (
     build_propfind_xml,
@@ -54,7 +55,7 @@ def test_parse_propfind_request() -> None:
 </d:propfind>"""
     parsed = parse_propfind_request(prop_xml)
     assert parsed == [
-        (DAV, "resourcetype"),
-        (DAV, "owner"),
-        (CALDAV, "calendar-home-set"),
+        PropertyTag(DAV, "resourcetype"),
+        PropertyTag(DAV, "owner"),
+        PropertyTag(CALDAV, "calendar-home-set"),
     ]

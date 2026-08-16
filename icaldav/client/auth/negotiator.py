@@ -41,30 +41,30 @@ class AuthNegotiator:
         headers = {"Depth": "0", "Content-Type": "application/xml; charset=utf-8"}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.request(
-                    "PROPFIND", url, data=body, headers=headers
-                ) as resp:
-                    if 200 <= resp.status < 300:
-                        return [AuthMethod(scheme=AuthScheme.NONE)]
+            async with (
+                aiohttp.ClientSession() as session,
+                session.request("PROPFIND", url, data=body, headers=headers) as resp,
+            ):
+                if 200 <= resp.status < 300:
+                    return [AuthMethod(scheme=AuthScheme.NONE)]
 
-                    if resp.status != 401:
-                        return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
+                if resp.status != 401:
+                    return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
 
-                    challenges = self._parse_challenges(resp.headers)
-                    if not challenges and hostname in KNOWN_OAUTH_ISSUERS:
-                        challenges = [("Bearer", None)]
+                challenges = self._parse_challenges(resp.headers)
+                if not challenges and hostname in KNOWN_OAUTH_ISSUERS:
+                    challenges = [("Bearer", None)]
 
-                    if not challenges:
-                        return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
+                if not challenges:
+                    return [AuthMethod(scheme=AuthScheme.UNKNOWN)]
 
-                    methods = []
-                    for scheme, realm in challenges:
-                        method = await self._resolve_scheme(
-                            scheme, realm, hostname, parsed_url.scheme
-                        )
-                        methods.append(method)
-                    return methods
+                methods = []
+                for scheme, realm in challenges:
+                    method = await self._resolve_scheme(
+                        scheme, realm, hostname, parsed_url.scheme
+                    )
+                    methods.append(method)
+                return methods
         except aiohttp.ClientError:
             _LOGGER.error("Connection error probing %s", url, exc_info=True)
             raise
