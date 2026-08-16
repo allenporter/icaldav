@@ -1,6 +1,6 @@
 """Unit tests for CalDAV REPORT Multi-Status XML response generation and parsing."""
 
-from icaldav.store.types import ReportResource
+from icaldav.xml.report.models import ReportResource
 from icaldav.xml.report.response import (
     build_report_response,
     parse_report_response,

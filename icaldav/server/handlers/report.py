@@ -8,13 +8,13 @@ RFC Reference:
 
 import logging
 import xml.etree.ElementTree as ET
+
 from aiohttp import web
 
 from icaldav.filter import matches_comp_filter
 from icaldav.server.handlers.decorators import path_args
 from icaldav.store.principal import InMemoryPrincipalStore, PrincipalStore
 from icaldav.store.types import CollectionPath, LocalStore, ResourcePath
-
 from icaldav.xml.namespaces import DAV, qname, strip_ns
 from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.response import append_propfind_response

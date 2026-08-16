@@ -84,9 +84,8 @@ def parse_calendar_multiget(xml_bytes: bytes) -> CalendarMultigetRequest:
         tag = strip_ns(child.tag)
         if tag == "prop":
             props = _parse_props(child)
-        elif tag == "href":
-            if child.text:
-                hrefs.append(child.text.strip())
+        elif tag == "href" and child.text:
+            hrefs.append(child.text.strip())
 
     return CalendarMultigetRequest(props=props, hrefs=hrefs)
 

@@ -18,10 +18,10 @@ import aiohttp
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.exceptions import CalDavAuthError
+from icaldav.store.types import ReportResource
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
 from icaldav.xml.propfind.response import parse_multistatus_xml
-from icaldav.store.types import ReportResource
 from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,

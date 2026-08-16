@@ -5,9 +5,9 @@ RFC Reference:
     - RFC 4918 Section 14.20: DAV:propfind Element.
 """
 
-from collections.abc import Sequence
 import logging
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 
 from icaldav.xml.namespaces import DAV, qname, strip_ns
 
