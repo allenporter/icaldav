@@ -5,19 +5,18 @@ RFC Reference:
     - RFC 4791 Section 7.9: CALDAV:calendar-multiget REPORT.
 """
 
-from __future__ import annotations
-
 import xml.etree.ElementTree as ET
 
+from icaldav.engine.models import (
+    CalendarMultigetQuery,
+    CalendarQuery,
+    PrincipalSearchQuery,
+    PropertyTag,
+    SearchCriteria,
+    SyncCollectionQuery,
+)
 from icaldav.filter import CompFilter, TimeRange
 from icaldav.xml.namespaces import CALDAV, DAV, qname, strip_ns
-from icaldav.xml.report.models import (
-    CalendarMultigetRequest,
-    CalendarQueryRequest,
-    PrincipalPropertySearchRequest,
-    PrincipalSearchCriterion,
-    SyncCollectionRequest,
-)
 
 
 def _parse_comp_filter(elem: ET.Element) -> CompFilter:
@@ -43,16 +42,44 @@ def _parse_comp_filter(elem: ET.Element) -> CompFilter:
     )
 
 
-def _parse_props(prop_elem: ET.Element) -> list[str]:
-    """Extract property local names from a <D:prop> element."""
-    return [strip_ns(child.tag) for child in prop_elem]
+def _parse_props(prop_elem: ET.Element) -> list[PropertyTag]:
+    """Extract PropertyTag list from a <D:prop> element."""
+    props = []
+    for child in prop_elem:
+        tag = child.tag
+        if tag.startswith("{") and "}" in tag:
+            ns, local_tag = tag[1:].split("}", 1)
+            props.append(PropertyTag(ns, local_tag))
+        else:
+            # Map calendar-data to CALDAV namespace as fallback
+            ns = CALDAV if strip_ns(tag) == "calendar-data" else DAV
+            props.append(PropertyTag(ns, strip_ns(tag)))
+    return props
 
 
-def parse_calendar_query(xml_bytes: bytes) -> CalendarQueryRequest:
-    """Parse a <C:calendar-query> REPORT request XML body."""
+def parse_report_root_tag(xml_bytes: bytes) -> str:
+    """Inspect and return the root tag name of a REPORT request XML body, namespace-stripped.
+
+    Args:
+        xml_bytes: Raw XML request byte payload.
+
+    Returns:
+        The namespace-stripped root tag name string, or empty string if invalid.
+    """
+    if not xml_bytes or not xml_bytes.strip():
+        return ""
+    try:
+        root = ET.fromstring(xml_bytes)
+        return strip_ns(root.tag)
+    except ET.ParseError:
+        return ""
+
+
+def parse_calendar_query(xml_bytes: bytes) -> CalendarQuery:
+    """Parse a <C:calendar-query> REPORT request XML body into a CalendarQuery IR object."""
     root = ET.fromstring(xml_bytes)
 
-    props: list[str] = []
+    props: list[PropertyTag] = []
     comp_filter: CompFilter | None = None
 
     for child in root:
@@ -70,14 +97,14 @@ def parse_calendar_query(xml_bytes: bytes) -> CalendarQueryRequest:
             "calendar-query REPORT missing required <C:filter>/<C:comp-filter>"
         )
 
-    return CalendarQueryRequest(props=props, comp_filter=comp_filter)
+    return CalendarQuery(props=props, comp_filter=comp_filter)
 
 
-def parse_calendar_multiget(xml_bytes: bytes) -> CalendarMultigetRequest:
-    """Parse a <C:calendar-multiget> REPORT request XML body."""
+def parse_calendar_multiget(xml_bytes: bytes) -> CalendarMultigetQuery:
+    """Parse a <C:calendar-multiget> REPORT request XML body into a CalendarMultigetQuery IR object."""
     root = ET.fromstring(xml_bytes)
 
-    props: list[str] = []
+    props: list[PropertyTag] = []
     hrefs: list[str] = []
 
     for child in root:
@@ -87,7 +114,7 @@ def parse_calendar_multiget(xml_bytes: bytes) -> CalendarMultigetRequest:
         elif tag == "href" and child.text:
             hrefs.append(child.text.strip())
 
-    return CalendarMultigetRequest(props=props, hrefs=hrefs)
+    return CalendarMultigetQuery(props=props, hrefs=hrefs)
 
 
 def build_calendar_query_xml(
@@ -184,50 +211,55 @@ def build_sync_collection_xml(
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def parse_principal_property_search(xml_bytes: bytes) -> PrincipalPropertySearchRequest:
-    """Parse a <DAV:principal-property-search> REPORT request XML body (RFC 3744 §9.4)."""
+def _parse_search_criterion(criterion_elem: ET.Element) -> SearchCriteria | None:
+    prop_tag = ""
+    match_str = ""
+    for child in criterion_elem:
+        tag = strip_ns(child.tag)
+        if tag == "prop":
+            for p in child:
+                prop_tag = strip_ns(p.tag)
+        elif tag == "match" and child.text:
+            match_str = child.text.strip()
+    if prop_tag and match_str:
+        return SearchCriteria(prop_tag=prop_tag, match=match_str)
+    return None
+
+
+def parse_principal_property_search(xml_bytes: bytes) -> PrincipalSearchQuery:
+    """Parse a <DAV:principal-property-search> REPORT request XML body into a PrincipalSearchQuery IR object."""
     if not xml_bytes or not xml_bytes.strip():
-        return PrincipalPropertySearchRequest(criteria=[])
+        return PrincipalSearchQuery(criteria=[], props=[])
 
     root = ET.fromstring(xml_bytes)
-    criteria: list[PrincipalSearchCriterion] = []
+    criteria: list[SearchCriteria] = []
+    props: list[PropertyTag] = []
 
     for child in root:
-        if strip_ns(child.tag) == "property-search":
-            prop_tag = ""
-            match_str = ""
-            for search_child in child:
-                stag = strip_ns(search_child.tag)
-                if stag == "prop":
-                    for p in search_child:
-                        prop_tag = strip_ns(p.tag)
-                elif stag == "match" and search_child.text:
-                    match_str = search_child.text.strip()
+        tag = strip_ns(child.tag)
+        if tag == "prop":
+            props = _parse_props(child)
+        elif tag == "property-search":
+            crit = _parse_search_criterion(child)
+            if crit is not None:
+                criteria.append(crit)
 
-            if prop_tag and match_str:
-                criteria.append(
-                    PrincipalSearchCriterion(prop_tag=prop_tag, match=match_str)
-                )
-
-    return PrincipalPropertySearchRequest(criteria=criteria)
+    return PrincipalSearchQuery(criteria=criteria, props=props)
 
 
-def parse_sync_collection(xml_bytes: bytes) -> SyncCollectionRequest:
-    """Parse a <DAV:sync-collection> REPORT request XML body (RFC 6578 §3)."""
+def parse_sync_collection(xml_bytes: bytes) -> SyncCollectionQuery:
+    """Parse a <DAV:sync-collection> REPORT request XML body into a SyncCollectionQuery IR object."""
     if not xml_bytes or not xml_bytes.strip():
-        return SyncCollectionRequest(sync_token="")
+        return SyncCollectionQuery(sync_token="")
 
     root = ET.fromstring(xml_bytes)
     sync_token = ""
-    sync_level = "1"
     limit: int | None = None
 
     for child in root:
         tag = strip_ns(child.tag)
         if tag == "sync-token" and child.text:
             sync_token = child.text.strip()
-        elif tag == "sync-level" and child.text:
-            sync_level = child.text.strip()
         elif tag == "limit":
             for nres in child:
                 if strip_ns(nres.tag) == "nresults" and nres.text:
@@ -236,6 +268,4 @@ def parse_sync_collection(xml_bytes: bytes) -> SyncCollectionRequest:
                     except ValueError:
                         pass
 
-    return SyncCollectionRequest(
-        sync_token=sync_token, sync_level=sync_level, limit=limit
-    )
+    return SyncCollectionQuery(sync_token=sync_token, limit=limit)

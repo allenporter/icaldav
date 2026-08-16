@@ -9,6 +9,7 @@ import logging
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 
+from icaldav.engine.models import PropertyTag
 from icaldav.xml.namespaces import DAV, qname, strip_ns
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +45,25 @@ def build_propfind_xml(props: Sequence[str] | None = None) -> bytes:
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def parse_propfind_request(xml_bytes: bytes) -> list[tuple[str, str]] | None:
+def parse_propfind_root_tag(xml_bytes: bytes) -> str:
+    """Inspect and return the root tag name of a PROPFIND request XML body, namespace-stripped.
+
+    Args:
+        xml_bytes: Raw XML request byte payload.
+
+    Returns:
+        The namespace-stripped root tag name string, or empty string if invalid.
+    """
+    if not xml_bytes or not xml_bytes.strip():
+        return ""
+    try:
+        root = ET.fromstring(xml_bytes)
+        return strip_ns(root.tag)
+    except ET.ParseError:
+        return ""
+
+
+def parse_propfind_request(xml_bytes: bytes) -> list[PropertyTag] | None:
     """Parse a <DAV:propfind> XML request body to extract requested property names.
 
     RFC Reference:
@@ -55,7 +74,7 @@ def parse_propfind_request(xml_bytes: bytes) -> list[tuple[str, str]] | None:
         xml_bytes: Raw XML request byte payload.
 
     Returns:
-        A list of (namespace, local_tag) tuples if explicit properties were requested in <DAV:prop>,
+        A list of PropertyTag objects if explicit properties were requested in <DAV:prop>,
         or None if <DAV:allprop/>, <DAV:propname/>, or no body was supplied.
     """
     if not xml_bytes or not xml_bytes.strip():
@@ -72,14 +91,14 @@ def parse_propfind_request(xml_bytes: bytes) -> list[tuple[str, str]] | None:
 
     for child in root:
         if strip_ns(child.tag) == "prop":
-            props: list[tuple[str, str]] = []
+            props: list[PropertyTag] = []
             for prop in child:
                 tag = prop.tag
                 if tag.startswith("{") and "}" in tag:
                     ns_part, local_tag = tag[1:].split("}", 1)
-                    props.append((ns_part, local_tag))
+                    props.append(PropertyTag(ns_part, local_tag))
                 else:
-                    props.append((DAV, tag))
+                    props.append(PropertyTag(DAV, tag))
             return props
 
     return None

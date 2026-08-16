@@ -15,7 +15,7 @@ from icaldav.xml.namespaces import (
     DavProp,
     strip_ns,
 )
-from icaldav.xml.propfind.models import ResourceKind, ResourceTarget
+from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.response import (
     create_property_element,
     parse_multistatus_xml,
