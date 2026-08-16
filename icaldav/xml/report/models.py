@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from icaldav.filter import CompFilter
+from icaldav.store.types import ReportResource
 
 
 @dataclass

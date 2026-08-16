@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any
 
-from icaldav.store.types import ResourcePath
+from icaldav.store.types import ResourceKind, ResourcePath, ResourceTarget
 
 
 @dataclass
