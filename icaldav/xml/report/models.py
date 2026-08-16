@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from icaldav.filter import CompFilter
-from icaldav.store.types import ReportResource
+from icaldav.store.types import ReportResource  # noqa: F401
 
 
 @dataclass
