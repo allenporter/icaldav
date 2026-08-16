@@ -21,8 +21,8 @@ RFC References:
   - RFC 4791 Section 3: CalDAV XML Namespaces (Namespace: urn:ietf:params:xml:ns:caldav).
 """
 
-from enum import StrEnum
 import xml.etree.ElementTree as ET
+from enum import StrEnum
 
 DAV = "DAV:"
 CALDAV = "urn:ietf:params:xml:ns:caldav"

@@ -64,10 +64,12 @@ class PropfindQuery:
     depth: int
     requested_props: list[PropertyTag]
 
+
 @dataclass(frozen=True)
 class SyncCollectionQuery:
     sync_token: str
     limit: int | None = None
+
 
 @dataclass(frozen=True)
 class CalendarQuery:
@@ -82,10 +84,12 @@ class PropstatBlock:
     status_code: int
     properties: dict[PropertyTag, Any]
 
+
 @dataclass(frozen=True)
 class WebDavResourceStatus:
     href: str
     propstats: list[PropstatBlock]
+
 
 @dataclass(frozen=True)
 class WebDavMultiStatus:

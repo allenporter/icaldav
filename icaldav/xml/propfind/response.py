@@ -7,9 +7,10 @@ RFC Reference:
 """
 
 import logging
-from typing import Any
 import xml.etree.ElementTree as ET
+from typing import Any
 
+from icaldav.engine.models import PropertyTag, WebDavMultiStatus
 from icaldav.store.principal import InMemoryPrincipalStore
 from icaldav.xml.namespaces import (
     CALDAV,
@@ -22,11 +23,10 @@ from icaldav.xml.namespaces import (
     qname,
     strip_ns,
 )
+from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.models import (
     PropfindItem,
     Propstat,
-    ResourceKind,
-    ResourceTarget,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -333,3 +333,139 @@ def parse_multistatus_xml(xml_bytes: bytes) -> list[PropfindItem]:
             items.append(PropfindItem(href=href, propstats=propstats))
 
     return items
+
+
+def _build_dav_property(name: str, val: Any) -> ET.Element | None:
+    if name == DavProp.RESOURCETYPE:
+        rt = ET.Element(qname(DAV, DavProp.RESOURCETYPE))
+        if "collection" in val:
+            ET.SubElement(rt, qname(DAV, "collection"))
+        if "principal" in val:
+            ET.SubElement(rt, qname(DAV, "principal"))
+        if "calendar" in val:
+            ET.SubElement(rt, qname(CALDAV, "calendar"))
+        return rt
+
+    if name == DavProp.GETETAG:
+        etag_elem = ET.Element(qname(DAV, DavProp.GETETAG))
+        clean_val = val.strip('"')
+        etag_elem.text = f'"{clean_val}"'
+        return etag_elem
+
+    if name in (
+        DavProp.CURRENT_USER_PRINCIPAL,
+        DavProp.PRINCIPAL_URL,
+        DavProp.OWNER,
+    ):
+        elem = ET.Element(qname(DAV, name))
+        ET.SubElement(elem, qname(DAV, "href")).text = val
+        return elem
+
+    if name == DavProp.CURRENT_USER_PRIVILEGE_SET:
+        cups = ET.Element(qname(DAV, DavProp.CURRENT_USER_PRIVILEGE_SET))
+        priv = ET.SubElement(cups, qname(DAV, "privilege"))
+        for p_name in val:
+            ET.SubElement(priv, qname(DAV, p_name))
+        return cups
+
+    if name == DavProp.SUPPORTED_REPORT_SET:
+        srs = ET.Element(qname(DAV, DavProp.SUPPORTED_REPORT_SET))
+        for r_tag in val:
+            sr = ET.SubElement(srs, qname(DAV, "supported-report"))
+            rep = ET.SubElement(sr, qname(DAV, "report"))
+            ET.SubElement(rep, qname(r_tag.namespace, r_tag.name))
+        return srs
+
+    if name == DavProp.SYNC_TOKEN:
+        st = ET.Element(qname(DAV, DavProp.SYNC_TOKEN))
+        st.text = val
+        return st
+
+    if name == DavProp.DISPLAYNAME:
+        dn = ET.Element(qname(DAV, DavProp.DISPLAYNAME))
+        dn.text = val
+        return dn
+    return None
+
+
+def _build_caldav_property(name: str, val: Any) -> ET.Element | None:
+    if name in (CalDavProp.CALENDAR_HOME_SET, CalDavProp.CALENDAR_USER_ADDRESS_SET):
+        elem = ET.Element(qname(CALDAV, name))
+        ET.SubElement(elem, qname(DAV, "href")).text = val
+        return elem
+
+    if name == CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET:
+        sccs = ET.Element(qname(CALDAV, CalDavProp.SUPPORTED_CALENDAR_COMPONENT_SET))
+        for comp in val:
+            ET.SubElement(sccs, qname(CALDAV, "comp"), attrib={"name": comp})
+        return sccs
+
+    if name == CalDavProp.MAX_RESOURCE_SIZE:
+        mrs = ET.Element(qname(CALDAV, CalDavProp.MAX_RESOURCE_SIZE))
+        mrs.text = str(val)
+        return mrs
+    return None
+
+
+def _build_resolved_property_element(tag: PropertyTag, val: Any) -> ET.Element | None:
+    """Helper to construct an XML element for a given PropertyTag and its resolved value."""
+    ns = tag.namespace
+    name = tag.name
+
+    if ns == DAV:
+        elem = _build_dav_property(name, val)
+        if elem is not None:
+            return elem
+    elif ns == CALDAV:
+        elem = _build_caldav_property(name, val)
+        if elem is not None:
+            return elem
+    elif ns == CALSERVER:
+        if name == CalServerProp.GETCTAG:
+            ctag_elem = ET.Element(qname(CALSERVER, CalServerProp.GETCTAG))
+            ctag_elem.text = val
+            return ctag_elem
+
+    # Fallback to a simple text element
+    elem = ET.Element(qname(ns, name))
+    elem.text = str(val)
+    return elem
+
+
+def build_propfind_response_xml(multistatus: WebDavMultiStatus) -> bytes:
+    """Build a WebDAV <DAV:multistatus> XML response body from a WebDavMultiStatus IR object.
+
+    Args:
+        multistatus: The WebDavMultiStatus domain model containing resource statuses.
+
+    Returns:
+        Encoded UTF-8 XML byte string representation of the Multi-Status response.
+    """
+    root = ET.Element(qname(DAV, "multistatus"))
+    for response_ir in multistatus.responses:
+        resp = ET.SubElement(root, qname(DAV, "response"))
+        ET.SubElement(resp, qname(DAV, "href")).text = response_ir.href
+
+        for block in response_ir.propstats:
+            status_text = f"HTTP/1.1 {block.status_code} "
+            if block.status_code == 200:
+                status_text += "OK"
+            else:
+                status_text += "Not Found"
+
+            propstat = ET.SubElement(resp, qname(DAV, "propstat"))
+            prop_elem = ET.SubElement(propstat, qname(DAV, "prop"))
+
+            for tag, val in block.properties.items():
+                if block.status_code == 200:
+                    elem = _build_resolved_property_element(tag, val)
+                else:
+                    elem = ET.Element(qname(tag.namespace, tag.name))
+
+                if elem is not None:
+                    prop_elem.append(elem)
+
+            status = ET.SubElement(propstat, qname(DAV, "status"))
+            status.text = status_text
+
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)

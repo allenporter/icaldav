@@ -51,12 +51,12 @@ RFC References:
 import argparse
 import asyncio
 import os
-from pathlib import Path
 import sys
-from typing import Sequence
-from aiohttp import web
-
 import webbrowser
+from collections.abc import Sequence
+from pathlib import Path
+
+from aiohttp import web
 
 from icaldav.client.auth import AuthProfile, AuthStore
 from icaldav.client.client import CalDavClient
@@ -321,7 +321,7 @@ async def run_auth_async(args: argparse.Namespace) -> int:
         print(f"Waiting for OAuth callback on http://localhost:{args.port} ...")
         try:
             code = await OAuthSession.fetch_code_from_callback(port=args.port)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("Error: OAuth callback timed out after 5 minutes.", file=sys.stderr)
             return 1
         except Exception as err:

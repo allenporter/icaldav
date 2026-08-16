@@ -140,11 +140,11 @@ def extract_time_range(ics_data: str) -> tuple[str | None, str | None]:
     lines = ics_data.splitlines()
     for line in lines:
         line_upper = line.strip().upper()
-        if line_upper.startswith("DTSTART:") or line_upper.startswith("DTSTART;"):
+        if line_upper.startswith(("DTSTART:", "DTSTART;")):
             parts = line.split(":", 1)
             if len(parts) > 1:
                 dtstart = parts[1].strip()
-        elif line_upper.startswith("DTEND:") or line_upper.startswith("DTEND;"):
+        elif line_upper.startswith(("DTEND:", "DTEND;")):
             parts = line.split(":", 1)
             if len(parts) > 1:
                 dtend = parts[1].strip()

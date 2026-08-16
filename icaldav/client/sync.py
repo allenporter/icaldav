@@ -57,9 +57,9 @@ from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
     LocalStore,
+    ReportResource,
     ResourcePath,
 )
-from icaldav.xml.report.models import ReportResource
 
 _LOGGER = logging.getLogger(__name__)
 

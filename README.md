@@ -63,6 +63,7 @@ import asyncio
 from icaldav import CalDavClient, CalDavSyncManager
 from icaldav.store import SQLiteStore
 
+
 async def main():
     async with CalDavClient(
         url="https://caldav.example.com",
@@ -75,13 +76,16 @@ async def main():
 
         # Sync events down to a local store
         store = SQLiteStore("calendar_cache.db")
-        sync_manager = CalDavSyncManager(client=client, collection=calendar, store=store)
+        sync_manager = CalDavSyncManager(
+            client=client, collection=calendar, store=store
+        )
         await sync_manager.run()
 
         # Query locally using `ical`'s timeline
         local_calendar = await store.get_calendar()
         for event in local_calendar.timeline.today():
             print(f"{event.start}: {event.summary}")
+
 
 asyncio.run(main())
 ```
