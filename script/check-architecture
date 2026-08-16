@@ -6,10 +6,7 @@ import sys
 from pathlib import Path
 
 # Known legacy violations to track progress during architecture refactoring
-KNOWN_LEGACY_XML_HANDLERS = {
-    "icaldav/server/handlers/propfind.py",
-    "icaldav/server/handlers/report.py",
-}
+KNOWN_LEGACY_XML_HANDLERS = set()
 
 
 def check_handler_xml_imports(repo_root: Path) -> tuple[list[str], list[str]]:
@@ -33,10 +30,13 @@ def check_handler_xml_imports(repo_root: Path) -> tuple[list[str], list[str]]:
                     if alias.name.startswith("xml.etree"):
                         has_xml_import = True
                         lineno = node.lineno
-            elif isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("xml.etree"):
-                    has_xml_import = True
-                    lineno = node.lineno
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("xml.etree")
+            ):
+                has_xml_import = True
+                lineno = node.lineno
 
         if has_xml_import:
             msg = f"{rel_path}:{lineno}: Handlers MUST NOT import 'xml.etree' directly. Use decoders/encoders."
@@ -69,13 +69,12 @@ def check_store_layer_isolation(repo_root: Path) -> list[str]:
                         violations.append(
                             f"{py_file.relative_to(repo_root)}:{node.lineno}: Store implementations MUST NOT import '{alias.name}'."
                         )
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    mod = node.module.split(".")[0]
-                    if mod in forbidden:
-                        violations.append(
-                            f"{py_file.relative_to(repo_root)}:{node.lineno}: Store implementations MUST NOT import from '{node.module}'."
-                        )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                mod = node.module.split(".")[0]
+                if mod in forbidden:
+                    violations.append(
+                        f"{py_file.relative_to(repo_root)}:{node.lineno}: Store implementations MUST NOT import from '{node.module}'."
+                    )
     return violations
 
 

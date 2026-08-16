@@ -2,9 +2,9 @@
 
 import pytest
 
-from icaldav.xml.report.models import (
-    CalendarMultigetRequest,
-    CalendarQueryRequest,
+from icaldav.engine.models import (
+    CalendarMultigetQuery,
+    CalendarQuery,
 )
 from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
@@ -27,9 +27,10 @@ def test_build_and_parse_calendar_query() -> None:
     assert b"20260701T000000Z" in xml_bytes
 
     req = parse_calendar_query(xml_bytes)
-    assert isinstance(req, CalendarQueryRequest)
-    assert "getetag" in req.props
-    assert "calendar-data" in req.props
+    assert isinstance(req, CalendarQuery)
+    prop_names = [p.name for p in req.props]
+    assert "getetag" in prop_names
+    assert "calendar-data" in prop_names
     assert req.comp_filter.name == "VCALENDAR"
     assert len(req.comp_filter.comp_filters) == 1
     vevent_filter = req.comp_filter.comp_filters[0]
@@ -58,10 +59,11 @@ def test_build_and_parse_calendar_multiget() -> None:
     assert b"/work/event1.ics" in xml_bytes
 
     req = parse_calendar_multiget(xml_bytes)
-    assert isinstance(req, CalendarMultigetRequest)
+    assert isinstance(req, CalendarMultigetQuery)
     assert req.hrefs == hrefs
-    assert "getetag" in req.props
-    assert "calendar-data" in req.props
+    prop_names = [p.name for p in req.props]
+    assert "getetag" in prop_names
+    assert "calendar-data" in prop_names
 
 
 def test_parse_principal_property_search() -> None:
