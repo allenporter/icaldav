@@ -38,7 +38,7 @@ class ReportHandler:
 
     @path_args
     async def handle_report(
-        self, request: web.Request, collection_id: str = ""
+        self, request: web.Request, collection_id: str = "", tail: str = ""
     ) -> web.Response:
         """Handle REPORT request dispatching to calendar-query, calendar-multiget, or principal-property-search."""
         body_bytes = await request.read()
