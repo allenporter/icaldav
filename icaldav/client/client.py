@@ -370,13 +370,13 @@ class CalDavClient:
     async def _sync_collection_page(
         self,
         url: str,
-        sync_token: str,
-        limit: int | None,
+        sync_token: str | None = "",
+        limit: int | None = None,
     ) -> tuple[list[ReportResource], str | None]:
         """Fetch a single page of sync-collection REPORT results."""
         session = await self._get_session()
         self._warn_insecure_auth(url)
-        body = build_sync_collection_xml(sync_token=sync_token, limit=limit)
+        body = build_sync_collection_xml(sync_token=sync_token or "", limit=limit)
         headers = {
             "Content-Type": "application/xml; charset=utf-8",
             "Depth": "1",
@@ -390,7 +390,7 @@ class CalDavClient:
     async def sync_collection(
         self,
         url: str,
-        sync_token: str = "",
+        sync_token: str | None = "",
         limit: int | None = None,
         auto_paginate: bool = False,
     ) -> tuple[list[ReportResource], str | None]:
@@ -422,7 +422,7 @@ class CalDavClient:
             return await self._sync_collection_page(url, sync_token, limit)
 
         all_resources: list[ReportResource] = []
-        current_token: str = sync_token
+        current_token: str = sync_token or ""
         seen_tokens: set[str] = set()
 
         while True:

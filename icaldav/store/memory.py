@@ -197,13 +197,17 @@ class MemoryStore(LocalStore):
             has_more = False
             page_token = curr_token_str
 
-        changed_out = [item[1] for item in selected if item[0] == "changed"]
-        deleted_out = [item[1] for item in selected if item[0] == "deleted"]
+        changed_out: list[CalendarResource] = [
+            item[1] for item in selected if isinstance(item[1], CalendarResource)
+        ]
+        deleted_out: list[str] = [
+            item[1] for item in selected if isinstance(item[1], str)
+        ]
 
         return SyncChanges(
             sync_token=page_token,
-            changed=changed_out,  # type: ignore[arg-type]
-            deleted_hrefs=deleted_out,  # type: ignore[arg-type]
+            changed=changed_out,
+            deleted_hrefs=deleted_out,
             has_more=has_more,
         )
 

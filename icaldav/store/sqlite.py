@@ -387,13 +387,17 @@ class SQLiteStore(LocalStore):
             has_more = False
             page_token = curr_token_str
 
-        changed_res = [item[1] for item in selected if item[0] == "changed"]
-        deleted_hrefs = [item[1] for item in selected if item[0] == "deleted"]
+        changed_res: list[CalendarResource] = [
+            item[1] for item in selected if isinstance(item[1], CalendarResource)
+        ]
+        deleted_hrefs: list[str] = [
+            item[1] for item in selected if isinstance(item[1], str)
+        ]
 
         return SyncChanges(
             sync_token=page_token,
-            changed=changed_res,  # type: ignore[arg-type]
-            deleted_hrefs=deleted_hrefs,  # type: ignore[arg-type]
+            changed=changed_res,
+            deleted_hrefs=deleted_hrefs,
             has_more=has_more,
         )
 
