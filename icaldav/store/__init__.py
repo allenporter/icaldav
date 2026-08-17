@@ -8,6 +8,7 @@ from icaldav.store.principal import (
     SingleUserPrincipalStore,
 )
 from icaldav.store.sqlite import SQLiteStore
+from icaldav.store.sqlite_principal import SQLitePrincipalStore
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
@@ -30,6 +31,7 @@ __all__ = [
     "ResourceKind",
     "ResourcePath",
     "ResourceTarget",
+    "SQLitePrincipalStore",
     "SQLiteStore",
     "SingleUserPrincipalStore",
     "SyncChanges",

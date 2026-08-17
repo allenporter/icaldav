@@ -51,7 +51,7 @@ These are required for Apple Calendar, Thunderbird, DAVx⁵, and test tools to d
 ## Known Gaps & Technical Debt (To Make "Non-Toy")
 
 - [ ] **WebDAV Sync Pagination & Tombstones (RFC 6578 §3.7 / §3.2)** — `sync-collection` currently returns all active ETags in a single batch. Implement deleted item tombstone responses (404 status items in sync diffs) and multi-page token pagination via `<DAV:limit><DAV:nresults>`.
-- [ ] **Persistent Multi-User PrincipalStore** — user database / directory backend for `PrincipalStore` returning dynamic user-scoped principal metadata.
+- [x] **Persistent Multi-User PrincipalStore** — user database / directory backend for `PrincipalStore` returning dynamic user-scoped principal metadata.
 - [ ] **PROPPATCH method** — set/remove properties like `displayname`, calendar color (RFC 4918 §9.2).
 - [ ] **MOVE / COPY methods** — move/copy resources between collections (RFC 4918 §9.8, §9.9).
 - [ ] **Collection-level ETag** — compute collection ETags for quick top-level change validation.

@@ -92,7 +92,7 @@ def _resolve_displayname(ctx: ResourceTarget) -> str:
     if ctx.kind == ResourceKind.ROOT:
         return "root"
     elif ctx.kind == ResourceKind.PRINCIPAL and ctx.principal:
-        return ctx.principal.user_id
+        return ctx.principal.display_name or ctx.principal.user_id
     elif ctx.kind == ResourceKind.CALENDAR and ctx.displayname:
         return ctx.displayname
     return ""

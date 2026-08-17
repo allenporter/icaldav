@@ -1,7 +1,8 @@
--- SQLite schema for icaldav persistent LocalStore
+-- SQLite schema for icaldav persistent LocalStore and PrincipalStore
 -- RFC References:
 --   - RFC 4918 / RFC 4791: Collections and calendar object resources.
 --   - RFC 6578: WebDAV sync collection tokens and deleted tombstones.
+--   - RFC 3744: WebDAV Access Control Protocol / Principal Directory.
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -31,5 +32,15 @@ CREATE TABLE IF NOT EXISTS tombstones (
     FOREIGN KEY(collection_path) REFERENCES collections(path) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS principals (
+    user_id TEXT PRIMARY KEY,
+    principal_path TEXT NOT NULL,
+    calendar_home_path TEXT NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_resources_collection ON resources(collection_path);
 CREATE INDEX IF NOT EXISTS idx_tombstones_collection ON tombstones(collection_path);
+CREATE INDEX IF NOT EXISTS idx_principals_email ON principals(email);

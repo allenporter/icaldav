@@ -33,6 +33,9 @@ class PrincipalInfo:
     email: str
     """Calendar user address URI for scheduling and invitation mapping (RFC 4791 §6.2.2, e.g. 'mailto:user@localhost')."""
 
+    display_name: str | None = None
+    """Human-readable display name for the principal (RFC 3744 §4.1 / RFC 4918 §15.2, e.g. 'Bernard')."""
+
 
 class PrincipalStore(Protocol):
     """Protocol for resolving PrincipalInfo metadata for authenticated users.
@@ -95,6 +98,7 @@ class InMemoryPrincipalStore:
                 principal_path="/principals/user/",
                 calendar_home_path="/",
                 email="mailto:user@localhost",
+                display_name=None,
             )
             self._principals["user"] = default_p
             self._default_user_id = "user"
@@ -106,6 +110,7 @@ class InMemoryPrincipalStore:
         principal_path: str = "/principals/user/",
         calendar_home_path: str = "/",
         email: str = "mailto:user@localhost",
+        display_name: str | None = None,
     ) -> "InMemoryPrincipalStore":
         """Factory method creating a single-user in-memory principal store.
 
@@ -114,6 +119,7 @@ class InMemoryPrincipalStore:
             principal_path: URL path to principal resource.
             calendar_home_path: Collection base path for calendars.
             email: Calendar user address URI.
+            display_name: Optional user display name.
 
         Returns:
             Configured InMemoryPrincipalStore instance.
@@ -123,6 +129,7 @@ class InMemoryPrincipalStore:
             principal_path=principal_path,
             calendar_home_path=calendar_home_path,
             email=email,
+            display_name=display_name,
         )
         return cls(principals=[p], default_user_id=user_id)
 
@@ -152,7 +159,7 @@ class InMemoryPrincipalStore:
         return self._principals[target_id]
 
     async def search_principals(self, match_str: str) -> list[PrincipalInfo]:
-        """Search registered principals matching substring in user_id or email.
+        """Search registered principals matching substring in user_id, email, or display_name.
 
         Args:
             match_str: Case-insensitive search substring.
@@ -164,7 +171,9 @@ class InMemoryPrincipalStore:
         return [
             p
             for p in self._principals.values()
-            if match_lower in p.user_id.lower() or match_lower in p.email.lower()
+            if match_lower in p.user_id.lower()
+            or match_lower in p.email.lower()
+            or (p.display_name is not None and match_lower in p.display_name.lower())
         ]
 
 

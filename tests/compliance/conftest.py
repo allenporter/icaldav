@@ -15,6 +15,7 @@ from icaldav.store.principal import (
     PrincipalStore,
 )
 from icaldav.store.sqlite import SQLiteStore
+from icaldav.store.sqlite_principal import SQLitePrincipalStore
 from icaldav.store.types import LocalStore
 
 
@@ -33,26 +34,31 @@ class ComplianceHarness:
 @pytest.fixture(params=["memory", "sqlite"])
 async def harness(request: pytest.FixtureRequest) -> AsyncGenerator[ComplianceHarness]:
     """Provide a running CalDavRouter application backed by each storage engine."""
-    principal_store = InMemoryPrincipalStore(
-        principals=[
-            PrincipalInfo(
-                user_id="alice",
-                principal_path="/principals/alice/",
-                calendar_home_path="/",
-                email="mailto:alice@example.com",
-            ),
-            PrincipalInfo(
-                user_id="bob",
-                principal_path="/principals/bob/",
-                calendar_home_path="/",
-                email="mailto:bob@example.com",
-            ),
-        ]
-    )
+    principals = [
+        PrincipalInfo(
+            user_id="alice",
+            principal_path="/principals/alice/",
+            calendar_home_path="/",
+            email="mailto:alice@example.com",
+        ),
+        PrincipalInfo(
+            user_id="bob",
+            principal_path="/principals/bob/",
+            calendar_home_path="/",
+            email="mailto:bob@example.com",
+        ),
+    ]
+
     if request.param == "memory":
         store: LocalStore = MemoryStore()
+        principal_store: PrincipalStore = InMemoryPrincipalStore(
+            principals=principals, default_user_id="alice"
+        )
     elif request.param == "sqlite":
         store = SQLiteStore(":memory:")
+        principal_store = SQLitePrincipalStore(
+            ":memory:", default_user_id="alice", initial_principals=principals
+        )
     else:
         raise ValueError(f"Unknown backend: {request.param}")
 
@@ -72,5 +78,7 @@ async def harness(request: pytest.FixtureRequest) -> AsyncGenerator[ComplianceHa
             base_url=base_url,
         )
 
+    if isinstance(principal_store, SQLitePrincipalStore):
+        await principal_store.close()
     if isinstance(store, SQLiteStore):
         await store.close()
