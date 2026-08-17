@@ -1,3 +1,5 @@
+"""Store subpackage for local persistence and principal abstractions."""
+
 from icaldav.store.memory import MemoryStore
 from icaldav.store.principal import (
     InMemoryPrincipalStore,
@@ -14,6 +16,7 @@ from icaldav.store.types import (
     ResourcePath,
     ResourceTarget,
     SyncChanges,
+    SyncToken,
 )
 
 __all__ = [
@@ -30,4 +33,5 @@ __all__ = [
     "SQLiteStore",
     "SingleUserPrincipalStore",
     "SyncChanges",
+    "SyncToken",
 ]

@@ -13,20 +13,8 @@ from icaldav.store.types import (
     LocalStore,
     ResourcePath,
     SyncChanges,
+    SyncToken,
 )
-
-
-def _extract_token_int(token_str: str | None) -> int:
-    """Extract integer sequence from a sync token URI or string."""
-    if not token_str:
-        return 0
-    match = re.search(r"(\d+)$", token_str.strip())
-    if match:
-        try:
-            return int(match.group(1))
-        except ValueError:
-            pass
-    return 0
 
 
 class MemoryStore(LocalStore):
@@ -63,7 +51,7 @@ class MemoryStore(LocalStore):
             return self._custom_tokens[coll]
         counter = self._token_counters.get(coll)
         if counter is not None:
-            return f"data:,{counter}"
+            return SyncToken.from_sequence(counter).uri
         return None
 
     async def set_sync_token(
@@ -71,7 +59,8 @@ class MemoryStore(LocalStore):
     ) -> None:
         """Store or update the DAV:sync-token for a given CollectionPath."""
         coll = CollectionPath.parse(collection)
-        self._token_counters[coll] = _extract_token_int(token)
+        st = SyncToken.parse(token)
+        self._token_counters[coll] = st.sequence
         self._custom_tokens[coll] = token
 
     async def get_etags(self, collection: CollectionPath | str) -> dict[str, str]:
@@ -150,9 +139,12 @@ class MemoryStore(LocalStore):
         """Retrieve modified and deleted resources in a CollectionPath since a sync token."""
         coll = CollectionPath.parse(collection)
         curr_counter = self._token_counters.get(coll, 0)
-        curr_token_str = self._custom_tokens.get(coll, f"data:,{curr_counter}")
+        curr_token_str = self._custom_tokens.get(
+            coll, SyncToken.from_sequence(curr_counter).uri
+        )
 
-        token_num = _extract_token_int(sync_token)
+        st = SyncToken.parse(sync_token)
+        token_num = st.sequence
 
         if token_num == 0:
             # Initial sync

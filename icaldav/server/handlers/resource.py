@@ -15,6 +15,14 @@ from icaldav.store.types import CalendarResource, LocalStore, ResourcePath
 
 
 def _normalize_etag(etag: str) -> str:
+    """Normalize an HTTP ETag by stripping whitespace, quotes, and weak validator prefix.
+
+    RFC Reference:
+        - RFC 7232 Section 2.3: Entity-Tag syntax defines weak validators prefixed
+          with 'W/' (e.g. W/"etag-123"), indicating semantic equivalence rather than
+          byte-for-byte exact equality. In CalDAV conditional validation, we strip
+          weak prefixes and surrounding double-quotes to compare the core tag value.
+    """
     cleaned = etag.strip()
     cleaned = cleaned.removeprefix("W/")
     return cleaned.strip('"')
@@ -115,8 +123,7 @@ class ResourceHandler:
         path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
         existing = await self.store.get_resource(path)
-        precond_error = _check_preconditions(request, existing)
-        if precond_error is not None:
+        if precond_error := _check_preconditions(request, existing):
             return precond_error
 
         body_bytes = await request.read()
@@ -143,8 +150,7 @@ class ResourceHandler:
         path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
         existing = await self.store.get_resource(path)
-        precond_error = _check_preconditions(request, existing)
-        if precond_error is not None:
+        if precond_error := _check_preconditions(request, existing):
             return precond_error
 
         deleted = await self.store.delete_resource(path)

@@ -9,7 +9,7 @@ RFC References:
 from __future__ import annotations
 
 import asyncio
-import re
+import importlib.resources
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -20,58 +20,17 @@ from icaldav.store.types import (
     LocalStore,
     ResourcePath,
     SyncChanges,
+    SyncToken,
 )
 
-_SCHEMA = """
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS collections (
-    path TEXT PRIMARY KEY,
-    sync_token_counter INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS resources (
-    path TEXT PRIMARY KEY,
-    collection_path TEXT NOT NULL,
-    etag TEXT NOT NULL,
-    ics_data TEXT NOT NULL,
-    uid TEXT,
-    token_id INTEGER NOT NULL DEFAULT 1,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(collection_path) REFERENCES collections(path) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS tombstones (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    path TEXT NOT NULL,
-    collection_path TEXT NOT NULL,
-    token_id INTEGER NOT NULL,
-    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(collection_path) REFERENCES collections(path) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_resources_collection ON resources(collection_path);
-CREATE INDEX IF NOT EXISTS idx_tombstones_collection ON tombstones(collection_path);
-"""
-
-
-def _extract_token_int(token_str: str | None) -> int:
-    """Extract integer sequence from a sync token URI or string."""
-    if not token_str:
-        return 0
-    match = re.search(r"(\d+)$", token_str.strip())
-    if match:
-        try:
-            return int(match.group(1))
-        except ValueError:
-            pass
-    return 0
-
-
-def _format_sync_token(counter: int) -> str:
-    """Format integer counter as RFC 6578 sync-token URI."""
-    return f"data:,{counter}"
+def _load_schema() -> str:
+    """Load the SQLite schema definition from the package schema.sql file."""
+    return (
+        importlib.resources.files("icaldav.store")
+        .joinpath("schema.sql")
+        .read_text("utf-8")
+    )
 
 
 class SQLiteStore(LocalStore):
@@ -100,7 +59,8 @@ class SQLiteStore(LocalStore):
             )
             self._conn.row_factory = sqlite3.Row
             if not self._initialized:
-                self._conn.executescript(_SCHEMA)
+                schema_sql = _load_schema()
+                self._conn.executescript(schema_sql)
                 self._initialized = True
         return self._conn
 
@@ -123,7 +83,7 @@ class SQLiteStore(LocalStore):
             (coll_str,),
         ).fetchone()
         if row is not None:
-            return _format_sync_token(row["sync_token_counter"])
+            return SyncToken.from_sequence(row["sync_token_counter"]).uri
         return None
 
     async def get_sync_token(self, collection: CollectionPath | str) -> str | None:
@@ -133,14 +93,14 @@ class SQLiteStore(LocalStore):
 
     def _sync_set_sync_token(self, coll_str: str, token: str) -> None:
         conn = self._get_connection()
-        token_num = _extract_token_int(token)
+        st = SyncToken.parse(token)
         conn.execute(
             """
             INSERT INTO collections (path, sync_token_counter)
             VALUES (?, ?)
             ON CONFLICT(path) DO UPDATE SET sync_token_counter = ?
             """,
-            (coll_str, token_num, token_num),
+            (coll_str, st.sequence, st.sequence),
         )
 
     async def set_sync_token(
@@ -337,9 +297,10 @@ class SQLiteStore(LocalStore):
             (coll_str,),
         ).fetchone()
         curr_counter = coll_row["sync_token_counter"] if coll_row else 0
-        curr_token_str = _format_sync_token(curr_counter)
+        curr_token_str = SyncToken.from_sequence(curr_counter).uri
 
-        token_num = _extract_token_int(token_str)
+        st = SyncToken.parse(token_str)
+        token_num = st.sequence
 
         if token_num == 0:
             # Initial sync: return all current resources, zero tombstones
