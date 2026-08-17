@@ -146,3 +146,4 @@ class ReportMultiStatus:
     missing_hrefs: list[str] = field(default_factory=list)
     deleted_hrefs: list[str] = field(default_factory=list)
     sync_token: str | None = None
+    has_more: bool = False

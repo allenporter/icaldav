@@ -285,6 +285,118 @@ class SQLiteStore(LocalStore):
         coll = CollectionPath.parse(collection)
         await self._execute_sync(self._sync_create_collection, coll.canonical)
 
+    def _sync_initial_sync_changes(
+        self,
+        conn: sqlite3.Connection,
+        coll_str: str,
+        curr_token_str: str,
+        limit: int | None,
+    ) -> SyncChanges:
+        query = (
+            "SELECT path, etag, ics_data, uid, token_id FROM resources "
+            "WHERE collection_path = ? ORDER BY token_id ASC, path ASC"
+        )
+        rows = conn.execute(query, (coll_str,)).fetchall()
+        if limit is not None and limit > 0 and len(rows) > limit:
+            selected_rows = rows[:limit]
+            resources = [
+                CalendarResource(
+                    path=ResourcePath.parse(r["path"]),
+                    etag=r["etag"],
+                    ics_data=r["ics_data"],
+                    uid=r["uid"],
+                )
+                for r in selected_rows
+            ]
+            last_token_id = selected_rows[-1]["token_id"]
+            page_token = SyncToken.from_sequence(last_token_id).uri
+            return SyncChanges(
+                sync_token=page_token,
+                changed=resources,
+                deleted_hrefs=[],
+                has_more=True,
+            )
+
+        resources = [
+            CalendarResource(
+                path=ResourcePath.parse(r["path"]),
+                etag=r["etag"],
+                ics_data=r["ics_data"],
+                uid=r["uid"],
+            )
+            for r in rows
+        ]
+        return SyncChanges(
+            sync_token=curr_token_str,
+            changed=resources,
+            deleted_hrefs=[],
+            has_more=False,
+        )
+
+    def _sync_delta_sync_changes(
+        self,
+        conn: sqlite3.Connection,
+        coll_str: str,
+        token_num: int,
+        curr_token_str: str,
+        limit: int | None,
+    ) -> SyncChanges:
+        res_rows = conn.execute(
+            """
+            SELECT path, etag, ics_data, uid, token_id FROM resources
+            WHERE collection_path = ? AND token_id > ?
+            ORDER BY token_id ASC
+            """,
+            (coll_str, token_num),
+        ).fetchall()
+
+        tomb_rows = conn.execute(
+            """
+            SELECT path, token_id FROM tombstones
+            WHERE collection_path = ? AND token_id > ?
+            ORDER BY token_id ASC
+            """,
+            (coll_str, token_num),
+        ).fetchall()
+
+        changed_paths = {r["path"] for r in res_rows}
+        all_changes: list[tuple[str, CalendarResource | str, int]] = []
+
+        for r in res_rows:
+            res = CalendarResource(
+                path=ResourcePath.parse(r["path"]),
+                etag=r["etag"],
+                ics_data=r["ics_data"],
+                uid=r["uid"],
+            )
+            all_changes.append(("changed", res, r["token_id"]))
+
+        for t in tomb_rows:
+            if t["path"] not in changed_paths:
+                all_changes.append(("deleted", t["path"], t["token_id"]))
+
+        all_changes.sort(key=lambda x: x[2])
+
+        if limit is not None and limit > 0 and len(all_changes) > limit:
+            selected = all_changes[:limit]
+            has_more = True
+            last_token_id = selected[-1][2]
+            page_token = SyncToken.from_sequence(last_token_id).uri
+        else:
+            selected = all_changes
+            has_more = False
+            page_token = curr_token_str
+
+        changed_res = [item[1] for item in selected if item[0] == "changed"]
+        deleted_hrefs = [item[1] for item in selected if item[0] == "deleted"]
+
+        return SyncChanges(
+            sync_token=page_token,
+            changed=changed_res,  # type: ignore[arg-type]
+            deleted_hrefs=deleted_hrefs,  # type: ignore[arg-type]
+            has_more=has_more,
+        )
+
     def _sync_get_changes_since(
         self,
         coll_str: str,
@@ -300,82 +412,12 @@ class SQLiteStore(LocalStore):
         curr_token_str = SyncToken.from_sequence(curr_counter).uri
 
         st = SyncToken.parse(token_str)
-        token_num = st.sequence
-
-        if token_num == 0:
-            # Initial sync: return all current resources, zero tombstones
-            query = "SELECT path, etag, ics_data, uid FROM resources WHERE collection_path = ? ORDER BY path ASC"
-            rows = conn.execute(query, (coll_str,)).fetchall()
-            resources = [
-                CalendarResource(
-                    path=ResourcePath.parse(r["path"]),
-                    etag=r["etag"],
-                    ics_data=r["ics_data"],
-                    uid=r["uid"],
-                )
-                for r in rows
-            ]
-            has_more = False
-            if limit is not None and limit > 0 and len(resources) > limit:
-                resources = resources[:limit]
-                has_more = True
-            return SyncChanges(
-                sync_token=curr_token_str,
-                changed=resources,
-                deleted_hrefs=[],
-                has_more=has_more,
+        if st.sequence == 0:
+            return self._sync_initial_sync_changes(
+                conn, coll_str, curr_token_str, limit
             )
-
-        # Delta sync: fetch resources modified since token_num
-        res_rows = conn.execute(
-            """
-            SELECT path, etag, ics_data, uid FROM resources
-            WHERE collection_path = ? AND token_id > ?
-            ORDER BY token_id ASC
-            """,
-            (coll_str, token_num),
-        ).fetchall()
-        changed_res = [
-            CalendarResource(
-                path=ResourcePath.parse(r["path"]),
-                etag=r["etag"],
-                ics_data=r["ics_data"],
-                uid=r["uid"],
-            )
-            for r in res_rows
-        ]
-
-        # Fetch tombstones since token_num
-        tomb_rows = conn.execute(
-            """
-            SELECT path FROM tombstones
-            WHERE collection_path = ? AND token_id > ?
-            ORDER BY token_id ASC
-            """,
-            (coll_str, token_num),
-        ).fetchall()
-
-        # Filter out tombstones if the resource was re-created in changed_res
-        changed_paths = {r.path.canonical for r in changed_res}
-        deleted_hrefs = [r["path"] for r in tomb_rows if r["path"] not in changed_paths]
-
-        # Handle limits and pagination
-        total_count = len(changed_res) + len(deleted_hrefs)
-        has_more = False
-        if limit is not None and limit > 0 and total_count > limit:
-            has_more = True
-            if len(changed_res) >= limit:
-                changed_res = changed_res[:limit]
-                deleted_hrefs = []
-            else:
-                remaining = limit - len(changed_res)
-                deleted_hrefs = deleted_hrefs[:remaining]
-
-        return SyncChanges(
-            sync_token=curr_token_str,
-            changed=changed_res,
-            deleted_hrefs=deleted_hrefs,
-            has_more=has_more,
+        return self._sync_delta_sync_changes(
+            conn, coll_str, st.sequence, curr_token_str, limit
         )
 
     async def get_changes_since(

@@ -128,6 +128,85 @@ class MemoryStore(LocalStore):
             self._resource_tokens[coll] = {}
             self._token_counters[coll] = 0
 
+    def _initial_sync_changes(
+        self,
+        coll: CollectionPath,
+        curr_token_str: str,
+        limit: int | None,
+    ) -> SyncChanges:
+        tokens = self._resource_tokens.get(coll, {})
+        coll_resources = self._resources.get(coll, {})
+        sorted_res = sorted(
+            coll_resources.values(),
+            key=lambda r: (tokens.get(r.path, 0), r.path.canonical),
+        )
+        if limit is not None and limit > 0 and len(sorted_res) > limit:
+            selected_res = sorted_res[:limit]
+            last_token_id = tokens.get(selected_res[-1].path, 0)
+            page_token = SyncToken.from_sequence(last_token_id).uri
+            return SyncChanges(
+                sync_token=page_token,
+                changed=selected_res,
+                deleted_hrefs=[],
+                has_more=True,
+            )
+        return SyncChanges(
+            sync_token=curr_token_str,
+            changed=sorted_res,
+            deleted_hrefs=[],
+            has_more=False,
+        )
+
+    def _delta_sync_changes(
+        self,
+        coll: CollectionPath,
+        token_num: int,
+        curr_token_str: str,
+        limit: int | None,
+    ) -> SyncChanges:
+        tokens = self._resource_tokens.get(coll, {})
+        coll_resources = self._resources.get(coll, {})
+        changed_res = [
+            (res, tokens.get(r_path, 0))
+            for r_path, res in coll_resources.items()
+            if tokens.get(r_path, 0) > token_num
+        ]
+        changed_paths = {res.path.canonical for res, _ in changed_res}
+        tomb_list = self._tombstones.get(coll, [])
+        deleted_items = [
+            (p_str, t_num)
+            for p_str, t_num in tomb_list
+            if t_num > token_num and p_str not in changed_paths
+        ]
+
+        all_changes: list[tuple[str, CalendarResource | str, int]] = []
+        for res, t_id in changed_res:
+            all_changes.append(("changed", res, t_id))
+        for p_str, t_id in deleted_items:
+            all_changes.append(("deleted", p_str, t_id))
+
+        all_changes.sort(key=lambda x: x[2])
+
+        if limit is not None and limit > 0 and len(all_changes) > limit:
+            selected = all_changes[:limit]
+            has_more = True
+            last_token_id = selected[-1][2]
+            page_token = SyncToken.from_sequence(last_token_id).uri
+        else:
+            selected = all_changes
+            has_more = False
+            page_token = curr_token_str
+
+        changed_out = [item[1] for item in selected if item[0] == "changed"]
+        deleted_out = [item[1] for item in selected if item[0] == "deleted"]
+
+        return SyncChanges(
+            sync_token=page_token,
+            changed=changed_out,  # type: ignore[arg-type]
+            deleted_hrefs=deleted_out,  # type: ignore[arg-type]
+            has_more=has_more,
+        )
+
     async def get_changes_since(
         self,
         collection: CollectionPath | str,
@@ -142,54 +221,6 @@ class MemoryStore(LocalStore):
         )
 
         st = SyncToken.parse(sync_token)
-        token_num = st.sequence
-
-        if token_num == 0:
-            # Initial sync
-            resources = list(self._resources.get(coll, {}).values())
-            has_more = False
-            if limit is not None and limit > 0 and len(resources) > limit:
-                resources = resources[:limit]
-                has_more = True
-            return SyncChanges(
-                sync_token=curr_token_str,
-                changed=resources,
-                deleted_hrefs=[],
-                has_more=has_more,
-            )
-
-        # Delta sync: changed items
-        tokens = self._resource_tokens.get(coll, {})
-        coll_resources = self._resources.get(coll, {})
-        changed_res = [
-            res
-            for r_path, res in coll_resources.items()
-            if tokens.get(r_path, 0) > token_num
-        ]
-
-        # Delta sync: tombstones
-        tomb_list = self._tombstones.get(coll, [])
-        changed_paths = {r.path.canonical for r in changed_res}
-        deleted_hrefs = [
-            p_str
-            for p_str, t_num in tomb_list
-            if t_num > token_num and p_str not in changed_paths
-        ]
-
-        total_count = len(changed_res) + len(deleted_hrefs)
-        has_more = False
-        if limit is not None and limit > 0 and total_count > limit:
-            has_more = True
-            if len(changed_res) >= limit:
-                changed_res = changed_res[:limit]
-                deleted_hrefs = []
-            else:
-                remaining = limit - len(changed_res)
-                deleted_hrefs = deleted_hrefs[:remaining]
-
-        return SyncChanges(
-            sync_token=curr_token_str,
-            changed=changed_res,
-            deleted_hrefs=deleted_hrefs,
-            has_more=has_more,
-        )
+        if st.sequence == 0:
+            return self._initial_sync_changes(coll, curr_token_str, limit)
+        return self._delta_sync_changes(coll, st.sequence, curr_token_str, limit)

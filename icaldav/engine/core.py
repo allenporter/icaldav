@@ -286,6 +286,7 @@ class CoreWebDavEngine:
             responses=matched,
             deleted_hrefs=changes.deleted_hrefs,
             sync_token=changes.sync_token,
+            has_more=changes.has_more,
         )
 
     async def evaluate_calendar_query(
