@@ -70,6 +70,9 @@ class CalDavRouter:
             app.router.add_route(
                 "PROPFIND", path, self.propfind_handler.handle_collection
             )
+            app.router.add_route(
+                "PROPPATCH", path, self.collection_handler.handle_proppatch
+            )
             app.router.add_route("REPORT", path, self.report_handler.handle_report)
 
         # Resources
@@ -77,6 +80,11 @@ class CalDavRouter:
             "PROPFIND",
             "/{collection_id}/{resource_id}",
             self.propfind_handler.handle_resource,
+        )
+        app.router.add_route(
+            "PROPPATCH",
+            "/{collection_id}/{resource_id}",
+            self.resource_handler.handle_proppatch,
         )
         app.router.add_route(
             "GET", "/{collection_id}/{resource_id}", self.resource_handler.handle_get
@@ -88,6 +96,16 @@ class CalDavRouter:
             "DELETE",
             "/{collection_id}/{resource_id}",
             self.resource_handler.handle_delete,
+        )
+        app.router.add_route(
+            "COPY",
+            "/{collection_id}/{resource_id}",
+            self.resource_handler.handle_copy,
+        )
+        app.router.add_route(
+            "MOVE",
+            "/{collection_id}/{resource_id}",
+            self.resource_handler.handle_move,
         )
 
         return app

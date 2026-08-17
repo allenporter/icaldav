@@ -18,10 +18,12 @@ import aiohttp
 
 from icaldav.client.auth import AuthProfile
 from icaldav.client.exceptions import CalDavAuthError
-from icaldav.store.types import ReportResource
+from icaldav.store.types import PropertyTag, ReportResource
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
 from icaldav.xml.propfind.response import parse_multistatus_xml
+from icaldav.xml.proppatch.request import build_proppatch_xml
+from icaldav.xml.proppatch.response import parse_proppatch_response
 from icaldav.xml.report.request import (
     build_calendar_multiget_xml,
     build_calendar_query_xml,
@@ -241,6 +243,111 @@ class CalDavClient:
 
         async with session.delete(url, headers=headers) as resp:
             self._check_response(resp)
+
+    async def copy_resource(
+        self,
+        url: str,
+        destination: str,
+        overwrite: bool = True,
+        etag: str | None = None,
+    ) -> int:
+        """Copy a calendar resource to a destination URI via HTTP COPY.
+
+        RFC Reference:
+            - RFC 4918 Section 9.8: COPY Method.
+
+        Args:
+            url: Source resource URI.
+            destination: Destination resource URI.
+            overwrite: If True, allow overwriting existing destination resource.
+            etag: Optional ETag for conditional If-Match check on source.
+
+        Returns:
+            HTTP status code (201 for Created, 204 for Overwrite).
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        headers = {
+            "Destination": destination,
+            "Overwrite": "T" if overwrite else "F",
+        }
+        if etag:
+            headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
+
+        async with session.request("COPY", url, headers=headers) as resp:
+            self._check_response(resp)
+            return resp.status
+
+    async def move_resource(
+        self,
+        url: str,
+        destination: str,
+        overwrite: bool = True,
+        etag: str | None = None,
+    ) -> int:
+        """Move a calendar resource to a destination URI via HTTP MOVE.
+
+        RFC Reference:
+            - RFC 4918 Section 9.9: MOVE Method.
+
+        Args:
+            url: Source resource URI.
+            destination: Destination resource URI.
+            overwrite: If True, allow overwriting existing destination resource.
+            etag: Optional ETag for conditional If-Match check on source.
+
+        Returns:
+            HTTP status code (201 for Created, 204 for Overwrite).
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        headers = {
+            "Destination": destination,
+            "Overwrite": "T" if overwrite else "F",
+        }
+        if etag:
+            headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
+
+        async with session.request("MOVE", url, headers=headers) as resp:
+            self._check_response(resp)
+            return resp.status
+
+    async def proppatch(
+        self,
+        url: str,
+        set_props: dict[PropertyTag, str] | None = None,
+        remove_props: list[PropertyTag] | None = None,
+        etag: str | None = None,
+    ) -> dict[PropertyTag, int]:
+        """Update or remove custom properties on a resource or collection via PROPPATCH.
+
+        RFC Reference:
+            - RFC 4918 Section 9.2: PROPPATCH Method.
+
+        Args:
+            url: Target resource or collection URI.
+            set_props: Mapping of PropertyTag to string property values to set.
+            remove_props: List of PropertyTag items to remove.
+            etag: Optional ETag for conditional If-Match check.
+
+        Returns:
+            Mapping of PropertyTag to HTTP status code for each property.
+        """
+        session = await self._get_session()
+        self._warn_insecure_auth(url)
+        body = build_proppatch_xml(set_props=set_props, remove_props=remove_props)
+        headers = {
+            "Content-Type": "application/xml; charset=utf-8",
+        }
+        if etag:
+            headers["If-Match"] = f'"{etag}"' if not etag.startswith('"') else etag
+
+        async with session.request(
+            "PROPPATCH", url, data=body, headers=headers
+        ) as resp:
+            self._check_response(resp)
+            content = await resp.read()
+            return parse_proppatch_response(content)
 
     async def calendar_query(
         self,

@@ -10,6 +10,7 @@ from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
     LocalStore,
+    PropertyTag,
     ResourcePath,
 )
 
@@ -240,3 +241,123 @@ async def test_store_multipage_sync_pagination(store: LocalStore) -> None:
     assert d_page3.changed == []
     assert d_page3.deleted_hrefs == []
     assert d_page3.has_more is False
+
+
+@pytest.mark.asyncio
+async def test_store_copy_resource(store: LocalStore) -> None:
+    """Verify COPY method in LocalStore implementations."""
+    coll_src = CollectionPath.parse("/work")
+    coll_dst = CollectionPath.parse("/archive")
+    await store.create_collection(coll_src)
+    await store.create_collection(coll_dst)
+
+    src_res = ResourcePath.parse("/work/meeting.ics")
+    dst_res = ResourcePath.parse("/archive/meeting.ics")
+
+    # 1. Copy non-existent source raises FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        await store.copy_resource(src_res, dst_res)
+
+    # Save source resource & custom property
+    await store.save_resource(
+        CalendarResource(
+            path=src_res,
+            etag="etag-meet",
+            ics_data=SAMPLE_ICS_1,
+            uid="event-1",
+        )
+    )
+
+    await store.set_properties(
+        src_res, {PropertyTag("http://example.com/ns", "priority"): "high"}
+    )
+
+    # 2. Copy to non-existent collection raises FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        await store.copy_resource(
+            src_res, ResourcePath.parse("/nonexistent/meeting.ics")
+        )
+
+    # 3. Copy creates new resource (returns False for overwritten)
+    overwritten = await store.copy_resource(src_res, dst_res)
+    assert overwritten is False
+
+    copied = await store.get_resource(dst_res)
+    assert copied is not None
+    assert copied.ics_data == SAMPLE_ICS_1
+    assert copied.etag == "etag-meet"
+    props = await store.get_properties(dst_res)
+    assert props.get(PropertyTag("http://example.com/ns", "priority")) == "high"
+
+    # Source still exists
+    assert await store.get_resource(src_res) is not None
+
+    # 4. Copy with overwrite=False on existing destination raises FileExistsError
+    with pytest.raises(FileExistsError):
+        await store.copy_resource(src_res, dst_res, overwrite=False)
+
+    # 5. Copy with overwrite=True returns True
+    overwritten2 = await store.copy_resource(src_res, dst_res, overwrite=True)
+    assert overwritten2 is True
+
+
+@pytest.mark.asyncio
+async def test_store_move_resource(store: LocalStore) -> None:
+    """Verify MOVE method in LocalStore implementations."""
+    coll_src = CollectionPath.parse("/work")
+    coll_dst = CollectionPath.parse("/archive")
+    await store.create_collection(coll_src)
+    await store.create_collection(coll_dst)
+
+    src_res = ResourcePath.parse("/work/task.ics")
+    dst_res = ResourcePath.parse("/archive/task.ics")
+
+    await store.save_resource(
+        CalendarResource(
+            path=src_res,
+            etag="etag-task",
+            ics_data=SAMPLE_ICS_2,
+            uid="event-2",
+        )
+    )
+
+    await store.set_properties(
+        src_res, {PropertyTag("http://example.com/ns", "tag"): "important"}
+    )
+
+    # Move to destination
+    overwritten = await store.move_resource(src_res, dst_res)
+    assert overwritten is False
+
+    # Source is deleted
+    assert await store.get_resource(src_res) is None
+    # Destination exists with properties
+    dest_item = await store.get_resource(dst_res)
+    assert dest_item is not None
+    assert dest_item.ics_data == SAMPLE_ICS_2
+    props = await store.get_properties(dst_res)
+    assert props.get(PropertyTag("http://example.com/ns", "tag")) == "important"
+
+
+@pytest.mark.asyncio
+async def test_store_custom_properties(store: LocalStore) -> None:
+    """Verify setting, getting, and removing custom dead properties."""
+
+    coll = CollectionPath.parse("/work")
+    await store.create_collection(coll)
+
+    tag1 = PropertyTag("http://example.com/ns", "description")
+    tag2 = PropertyTag("http://example.com/ns", "color")
+
+    # Initially empty
+    assert await store.get_properties(coll) == {}
+
+    # Set properties
+    await store.set_properties(coll, {tag1: "My Calendar", tag2: "blue"})
+    props = await store.get_properties(coll)
+    assert props == {tag1: "My Calendar", tag2: "blue"}
+
+    # Remove one property
+    await store.set_properties(coll, {}, remove_props=[tag2])
+    props2 = await store.get_properties(coll)
+    assert props2 == {tag1: "My Calendar"}

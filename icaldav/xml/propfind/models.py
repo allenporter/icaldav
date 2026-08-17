@@ -69,6 +69,14 @@ class PropfindItem:
         return False
 
     @property
+    def displayname(self) -> str | None:
+        """Helper returning the DAV:displayname property value if present in a 200 OK status."""
+        for ps in self.propstats:
+            if ps.status_code == 200 and "displayname" in ps.properties:
+                return ps.properties["displayname"]
+        return None
+
+    @property
     def etag(self) -> str | None:
         """Helper returning the DAV:getetag property value if present in a 200 OK status."""
         for ps in self.propstats:

@@ -14,7 +14,7 @@ def main() -> int:
     print("==========================================================================")
 
     pytest_cmd = [sys.executable, "-m", "pytest", "tests/compliance/", "-v"]
-    res = subprocess.run(pytest_cmd, cwd=repo_root)
+    res = subprocess.run(pytest_cmd, cwd=repo_root, check=False)
     if res.returncode != 0:
         print("[FAILED] Compliance test suite failed.", file=sys.stderr)
         return res.returncode
@@ -25,7 +25,9 @@ def main() -> int:
     print("                Verifying Groundtruth RFC Coverage                        ")
     print("==========================================================================")
     coverage_script = repo_root / "script" / "check-rfc-coverage"
-    res_cov = subprocess.run([sys.executable, str(coverage_script)], cwd=repo_root)
+    res_cov = subprocess.run(
+        [sys.executable, str(coverage_script)], cwd=repo_root, check=False
+    )
     if res_cov.returncode != 0:
         return res_cov.returncode
 

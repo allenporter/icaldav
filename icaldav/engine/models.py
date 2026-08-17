@@ -10,25 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from icaldav.filter import CompFilter, TimeRange
-from icaldav.store.types import ReportResource
-
-
-@dataclass(frozen=True)
-class PropertyTag:
-    """Represents a namespace-qualified WebDAV/CalDAV property tag name.
-
-    Attributes:
-        namespace: The XML namespace URI (e.g. "DAV:" or "urn:ietf:params:xml:ns:caldav").
-        name: The local element tag name (e.g. "getetag", "calendar-data").
-    """
-
-    namespace: str
-    name: str
-
-    @property
-    def clark_name(self) -> str:
-        """Return the Clark notation representation '{namespace}name'."""
-        return f"{{{self.namespace}}}{self.name}"
+from icaldav.store.types import PropertyTag, ReportResource
 
 
 @dataclass(frozen=True)

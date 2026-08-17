@@ -1,7 +1,10 @@
 """Normative compliance test suite for RFC 4918 (WebDAV Core Protocol)."""
 
+import aiohttp
 import pytest
 
+from icaldav.store.types import PropertyTag
+from icaldav.xml.namespaces import DAV
 from tests.compliance.conftest import ComplianceHarness
 
 SAMPLE_RESOURCE = (
@@ -110,3 +113,93 @@ async def test_rfc4918_conditional_preconditions(harness: ComplianceHarness) -> 
         headers={"If-Match": etag},
     )
     assert del_resp.status == 204
+
+
+@pytest.mark.asyncio
+async def test_rfc4918_copy_resource(harness: ComplianceHarness) -> None:
+    """RFC 4918 §9.8: COPY method duplicates resource with Destination and Overwrite header handling."""
+    await harness.test_client.request("MKCALENDAR", "/src-cal")
+    await harness.test_client.request("MKCALENDAR", "/dst-cal")
+
+    src_url = f"{harness.base_url}src-cal/event1.ics"
+    dst_url = f"{harness.base_url}dst-cal/copied.ics"
+
+    # PUT original resource
+    await harness.client.put_resource(src_url, SAMPLE_RESOURCE)
+
+    # 1. COPY to new destination returns 201 Created
+    status = await harness.client.copy_resource(src_url, dst_url)
+    assert status == 201
+
+    # Both resources exist and have matching content
+    src_ics, _src_etag = await harness.client.get_resource(src_url)
+    dst_ics, _dst_etag = await harness.client.get_resource(dst_url)
+    assert src_ics == SAMPLE_RESOURCE
+    assert dst_ics == SAMPLE_RESOURCE
+
+    # 2. COPY with Overwrite=F returns 412 Precondition Failed
+    with pytest.raises(aiohttp.ClientResponseError):
+        await harness.client.copy_resource(src_url, dst_url, overwrite=False)
+
+    # 3. COPY with Overwrite=T returns 204 No Content
+    status_ow = await harness.client.copy_resource(src_url, dst_url, overwrite=True)
+    assert status_ow == 204
+
+
+@pytest.mark.asyncio
+async def test_rfc4918_move_resource(harness: ComplianceHarness) -> None:
+    """RFC 4918 §9.9: MOVE method relocates resource to new destination."""
+    await harness.test_client.request("MKCALENDAR", "/move-src")
+    await harness.test_client.request("MKCALENDAR", "/move-dst")
+
+    src_url = f"{harness.base_url}move-src/event.ics"
+    dst_url = f"{harness.base_url}move-dst/moved.ics"
+
+    await harness.client.put_resource(src_url, SAMPLE_RESOURCE)
+
+    # MOVE relocates resource (returns 201 Created)
+    status = await harness.client.move_resource(src_url, dst_url)
+    assert status == 201
+
+    # Source is deleted
+    with pytest.raises(aiohttp.ClientResponseError):
+        await harness.client.get_resource(src_url)
+
+    # Destination contains the resource
+    dst_ics, _dst_etag = await harness.client.get_resource(dst_url)
+    assert dst_ics == SAMPLE_RESOURCE
+
+
+@pytest.mark.asyncio
+async def test_rfc4918_proppatch_custom_and_protected(
+    harness: ComplianceHarness,
+) -> None:
+    """RFC 4918 §9.2: PROPPATCH updates custom properties and rejects protected properties with 403."""
+
+    await harness.test_client.request("MKCALENDAR", "/patch-cal")
+
+    cal_url = f"{harness.base_url}patch-cal"
+    custom_tag = PropertyTag("http://example.com/ns", "color")
+    name_tag = PropertyTag(DAV, "displayname")
+
+    # 1. Update custom property and displayname
+    res = await harness.client.proppatch(
+        cal_url,
+        set_props={name_tag: "Updated Calendar Title", custom_tag: "green"},
+    )
+    assert res[name_tag] == 200
+    assert res[custom_tag] == 200
+
+    # 2. PROPFIND verifies displayname was updated (RFC 4918 §14.11)
+    items = await harness.client.propfind(f"{cal_url}/", depth=0)
+    assert len(items) == 1
+    assert items[0].displayname == "Updated Calendar Title"
+
+    # 3. Attempting to modify protected property (DAV:resourcetype) fails atomically
+    prot_tag = PropertyTag(DAV, "resourcetype")
+    res_fail = await harness.client.proppatch(
+        cal_url,
+        set_props={prot_tag: "collection", custom_tag: "red"},
+    )
+    assert res_fail[prot_tag] == 403
+    assert res_fail[custom_tag] == 424

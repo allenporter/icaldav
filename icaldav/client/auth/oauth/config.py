@@ -81,7 +81,10 @@ async def discover_oauth_config(
         OAuthConfig populated with discovered endpoints.
     """
     discovery_url = f"{issuer_url.rstrip('/')}/.well-known/openid-configuration"
-    async with aiohttp.ClientSession() as session, session.get(discovery_url) as resp:
+    async with (
+        aiohttp.ClientSession() as session,
+        session.get(discovery_url) as resp,
+    ):
         resp.raise_for_status()
         doc = await resp.json()
 
