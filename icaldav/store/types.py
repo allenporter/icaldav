@@ -243,6 +243,119 @@ class LocalStore(Protocol):
         """
         ...
 
+    async def get_changes_since(
+        self,
+        collection: CollectionPath,
+        sync_token: str | None = None,
+        limit: int | None = None,
+    ) -> SyncChanges:
+        """Retrieve modified and deleted resources in a CollectionPath since a sync token.
+
+        RFC Reference:
+            - RFC 6578 Section 3.2: sync-collection Report.
+
+        Args:
+            collection: CollectionPath object for the calendar collection.
+            sync_token: The previous sync token, or None/empty for initial sync.
+            limit: Optional maximum number of results to return.
+
+        Returns:
+            SyncChanges containing changed resources, deleted hrefs, and the updated sync token.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class SyncToken:
+    """Strongly-typed value object representing an RFC 6578 sync token.
+
+    RFC 6578 Section 3 requires sync tokens to be format-valid URIs.
+    A standard lightweight representation is the 'data:,<seq>' URI scheme
+    (e.g., 'data:,1', 'data:,42') or an opaque URI.
+
+    Attributes:
+        sequence: The integer revision/sequence counter (0 represents the initial un-synced state).
+        raw_uri: The full URI representation if constructed from an opaque token string.
+    """
+
+    sequence: int = 0
+    raw_uri: str | None = None
+
+    @classmethod
+    def initial(cls) -> SyncToken:
+        """Return the initial sync token representing the start of history."""
+        return cls(sequence=0)
+
+    @classmethod
+    def from_sequence(cls, seq: int) -> SyncToken:
+        """Create a sync token from an integer sequence counter."""
+        return cls(sequence=max(0, seq))
+
+    @classmethod
+    def parse(cls, raw: str | SyncToken | None) -> SyncToken:
+        """Parse a sync token string or URI into a SyncToken object.
+
+        Extracts the numeric sequence suffix if present (e.g. 'data:,5' -> 5,
+        'http://example.com/sync/12' -> 12). If no numeric sequence is found,
+        stores the raw URI with sequence 0.
+        """
+        if raw is None:
+            return cls.initial()
+        if isinstance(raw, SyncToken):
+            return raw
+
+        token_str = str(raw).strip()
+        if not token_str:
+            return cls.initial()
+
+        match = re.search(r"(\d+)$", token_str)
+        if match:
+            try:
+                seq = int(match.group(1))
+                return cls(sequence=seq, raw_uri=token_str)
+            except ValueError:
+                pass
+        return cls(sequence=0, raw_uri=token_str)
+
+    @property
+    def uri(self) -> str:
+        """Return the RFC 6578 format-compliant sync token URI string."""
+        if self.raw_uri is not None:
+            return self.raw_uri
+        return f"data:,{self.sequence}"
+
+    @property
+    def is_initial(self) -> bool:
+        """Return True if this token represents an initial (empty) sync state."""
+        return self.sequence == 0 and not bool(self.raw_uri)
+
+    def next(self) -> SyncToken:
+        """Generate the next sequential sync token."""
+        return SyncToken(sequence=self.sequence + 1)
+
+    def __str__(self) -> str:
+        return self.uri
+
+    def __repr__(self) -> str:
+        return f"SyncToken('{self.uri}', seq={self.sequence})"
+
+
+@dataclass(frozen=True)
+class SyncChanges:
+    """Represents a delta synchronization result for a collection (RFC 6578).
+
+    Attributes:
+        sync_token: The new sync token representing this sync state.
+        changed: List of new or modified CalendarResource items.
+        deleted_hrefs: List of resource href strings deleted since the previous token.
+        has_more: Whether there are additional pages of changes available (for pagination limits).
+    """
+
+    sync_token: str
+    changed: list[CalendarResource]
+    deleted_hrefs: list[str]
+    has_more: bool = False
+
 
 class ResourceKind(StrEnum):
     """Resource entity classification for WebDAV/CalDAV resources."""

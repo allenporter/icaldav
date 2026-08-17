@@ -14,6 +14,80 @@ from icaldav.server.handlers.decorators import path_args
 from icaldav.store.types import CalendarResource, LocalStore, ResourcePath
 
 
+def _normalize_etag(etag: str) -> str:
+    """Normalize an HTTP ETag by stripping whitespace, quotes, and weak validator prefix.
+
+    RFC Reference:
+        - RFC 7232 Section 2.3: Entity-Tag syntax defines weak validators prefixed
+          with 'W/' (e.g. W/"etag-123"), indicating semantic equivalence rather than
+          byte-for-byte exact equality. In CalDAV conditional validation, we strip
+          weak prefixes and surrounding double-quotes to compare the core tag value.
+    """
+    cleaned = etag.strip()
+    cleaned = cleaned.removeprefix("W/")
+    return cleaned.strip('"')
+
+
+def _check_if_match(
+    if_match: str, existing: CalendarResource | None
+) -> web.Response | None:
+    tags = [t.strip() for t in if_match.split(",")]
+    if "*" in tags:
+        if existing is None:
+            return web.Response(
+                status=412, text="Precondition Failed: Resource does not exist"
+            )
+        return None
+
+    if existing is None:
+        return web.Response(
+            status=412, text="Precondition Failed: Resource does not exist"
+        )
+
+    existing_clean = _normalize_etag(existing.etag)
+    matched_tags = {_normalize_etag(t) for t in tags}
+    if existing_clean not in matched_tags:
+        return web.Response(status=412, text="Precondition Failed: ETag mismatch")
+    return None
+
+
+def _check_if_none_match(
+    if_none_match: str, existing: CalendarResource | None
+) -> web.Response | None:
+    tags = [t.strip() for t in if_none_match.split(",")]
+    if "*" in tags:
+        if existing is not None:
+            return web.Response(
+                status=412, text="Precondition Failed: Resource already exists"
+            )
+        return None
+
+    if existing is not None:
+        existing_clean = _normalize_etag(existing.etag)
+        matched_tags = {_normalize_etag(t) for t in tags}
+        if existing_clean in matched_tags:
+            return web.Response(status=412, text="Precondition Failed: ETag match")
+    return None
+
+
+def _check_preconditions(
+    request: web.Request, existing: CalendarResource | None
+) -> web.Response | None:
+    if_match = request.headers.get("If-Match")
+    if if_match is not None:
+        resp = _check_if_match(if_match, existing)
+        if resp is not None:
+            return resp
+
+    if_none_match = request.headers.get("If-None-Match")
+    if if_none_match is not None:
+        resp = _check_if_none_match(if_none_match, existing)
+        if resp is not None:
+            return resp
+
+    return None
+
+
 class ResourceHandler:
     """Handler for calendar resource CRUD operations (GET, PUT, DELETE)."""
 
@@ -48,12 +122,14 @@ class ResourceHandler:
         """Handle PUT request to create or replace an iCalendar object resource file."""
         path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
 
+        existing = await self.store.get_resource(path)
+        if precond_error := _check_preconditions(request, existing):
+            return precond_error
+
         body_bytes = await request.read()
         ics_content = body_bytes.decode("utf-8")
 
         etag = hashlib.sha256(body_bytes).hexdigest()[:16]
-
-        existing = await self.store.get_resource(path)
         status = 204 if existing else 201
 
         resource = CalendarResource(
@@ -72,6 +148,10 @@ class ResourceHandler:
     ) -> web.Response:
         """Handle DELETE request to remove a calendar object resource."""
         path = ResourcePath.parse(f"/{collection_id}/{resource_id}")
+
+        existing = await self.store.get_resource(path)
+        if precond_error := _check_preconditions(request, existing):
+            return precond_error
 
         deleted = await self.store.delete_resource(path)
         if not deleted:

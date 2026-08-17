@@ -201,11 +201,10 @@ class CalDavSyncManager:
                 added += 1
             elif local_etags_norm[item.normalized_href] != item.normalized_etag:
                 updated += 1
-            else:
-                unmodified += 1
 
             await self.store.save_resource(resource)
 
+        unmodified = max(0, len(local_etags_norm) - updated - deleted)
         new_token = server_token or f"sync-token-{len(local_etags) + added - deleted}"
         await self.store.set_sync_token(self.collection_path, new_token)
 

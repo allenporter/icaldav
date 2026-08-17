@@ -60,3 +60,33 @@ async def test_memory_store_resource_crud() -> None:
 
     # Deleting non-existent resource returns False
     assert await store.delete_resource("/work/event1.ics") is False
+
+
+@pytest.mark.asyncio
+async def test_memory_store_get_changes_since() -> None:
+    """Test delta sync changes and tombstone tracking in MemoryStore."""
+    store = MemoryStore()
+
+    changes0 = await store.get_changes_since("/work", sync_token=None)
+    assert len(changes0.changed) == 0
+    token0 = changes0.sync_token
+
+    await store.save_resource(
+        CalendarResource(
+            path=ResourcePath.parse("/work/event1.ics"),
+            etag="etag-1",
+            ics_data=SAMPLE_ICS_DATA,
+            uid="123",
+        )
+    )
+
+    changes1 = await store.get_changes_since("/work", sync_token=token0)
+    assert len(changes1.changed) == 1
+    assert changes1.deleted_hrefs == []
+    token1 = changes1.sync_token
+
+    await store.delete_resource("/work/event1.ics")
+
+    changes2 = await store.get_changes_since("/work", sync_token=token1)
+    assert len(changes2.changed) == 0
+    assert changes2.deleted_hrefs == ["/work/event1.ics"]

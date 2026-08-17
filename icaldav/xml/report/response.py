@@ -30,10 +30,12 @@ def build_report_response(
     """
     if isinstance(resources, ReportMultiStatus):
         res_list = resources.responses
-        missing_list = resources.missing_hrefs
+        missing_list = list(resources.missing_hrefs) + list(resources.deleted_hrefs)
+        sync_token = resources.sync_token
     else:
         res_list = resources
         missing_list = missing_hrefs or []
+        sync_token = None
 
     root = ET.Element(qname(DAV, "multistatus"))
 
@@ -64,6 +66,10 @@ def build_report_response(
         propstat = ET.SubElement(resp, qname(DAV, "propstat"))
         status = ET.SubElement(propstat, qname(DAV, "status"))
         status.text = "HTTP/1.1 404 Not Found"
+
+    if sync_token is not None:
+        st_elem = ET.SubElement(root, qname(DAV, "sync-token"))
+        st_elem.text = sync_token
 
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 

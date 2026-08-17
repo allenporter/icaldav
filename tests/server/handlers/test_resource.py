@@ -38,3 +38,58 @@ async def test_resource_get_put_delete_flow() -> None:
         # DELETE returns 204
         del_resp = await client.delete("/work/event1.ics")
         assert del_resp.status == 204
+
+
+@pytest.mark.asyncio
+async def test_resource_preconditions() -> None:
+    """Test If-Match and If-None-Match HTTP conditional requests."""
+    store = MemoryStore()
+    app = create_app(store)
+    ics_payload = (
+        "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:123\r\nEND:VEVENT\r\nEND:VCALENDAR"
+    )
+
+    async with TestClient(TestServer(app)) as client:
+        # If-Match: * on non-existent resource fails with 412
+        resp = await client.put(
+            "/work/event1.ics", data=ics_payload, headers={"If-Match": "*"}
+        )
+        assert resp.status == 412
+
+        # If-None-Match: * on non-existent resource succeeds (201 Created)
+        resp = await client.put(
+            "/work/event1.ics", data=ics_payload, headers={"If-None-Match": "*"}
+        )
+        assert resp.status == 201
+        etag = resp.headers.get("ETag")
+        assert etag is not None
+
+        # If-None-Match: * on existing resource fails with 412
+        resp = await client.put(
+            "/work/event1.ics", data=ics_payload, headers={"If-None-Match": "*"}
+        )
+        assert resp.status == 412
+
+        # If-Match with matching ETag succeeds (204 No Content)
+        resp = await client.put(
+            "/work/event1.ics", data=ics_payload, headers={"If-Match": etag}
+        )
+        assert resp.status == 204
+
+        # If-Match with wrong ETag fails with 412
+        resp = await client.put(
+            "/work/event1.ics",
+            data=ics_payload,
+            headers={"If-Match": '"wrong-etag"'},
+        )
+        assert resp.status == 412
+
+        # DELETE with wrong ETag fails with 412
+        resp = await client.delete(
+            "/work/event1.ics", headers={"If-Match": '"wrong-etag"'}
+        )
+        assert resp.status == 412
+
+        # DELETE with matching ETag succeeds with 204
+        resp = await client.delete("/work/event1.ics", headers={"If-Match": etag})
+        assert resp.status == 204

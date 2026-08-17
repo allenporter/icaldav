@@ -10,8 +10,6 @@ RFC References:
     - RFC 3744: WebDAV Access Control Protocol
 """
 
-from typing import Any
-
 from icaldav.engine.models import (
     CalendarMultigetQuery,
     CalendarQuery,
@@ -20,16 +18,16 @@ from icaldav.engine.models import (
     PropfindQuery,
     PropstatBlock,
     ReportMultiStatus,
+    ReportResource,
     SyncCollectionQuery,
     WebDavMultiStatus,
     WebDavResourceStatus,
 )
 from icaldav.filter import matches_comp_filter
-from icaldav.store.principal import PrincipalInfo, PrincipalStore
+from icaldav.store.principal import PrincipalStore
 from icaldav.store.types import (
     CollectionPath,
     LocalStore,
-    ReportResource,
     ResourceKind,
     ResourcePath,
     ResourceTarget,
@@ -265,7 +263,7 @@ class CoreWebDavEngine:
         collection: CollectionPath,
         query: SyncCollectionQuery,
     ) -> ReportMultiStatus:
-        """Evaluate collection sync query mapping active resources.
+        """Evaluate collection sync query mapping active resources and tombstones.
 
         Args:
             store: LocalStore database instance.
@@ -275,15 +273,20 @@ class CoreWebDavEngine:
         Returns:
             ReportMultiStatus containing updated/deleted resource statuses and sync token.
         """
-        resources = await store.get_resources(collection)
+        changes = await store.get_changes_since(
+            collection=collection,
+            sync_token=query.sync_token,
+            limit=query.limit,
+        )
         matched = [
             ReportResource(href=res.href, etag=res.etag, ics_data=res.ics_data)
-            for res in resources
+            for res in changes.changed
         ]
-        if query.limit is not None and query.limit > 0:
-            matched = matched[: query.limit]
-
-        return ReportMultiStatus(responses=matched)
+        return ReportMultiStatus(
+            responses=matched,
+            deleted_hrefs=changes.deleted_hrefs,
+            sync_token=changes.sync_token,
+        )
 
     async def evaluate_calendar_query(
         self,
