@@ -396,9 +396,7 @@ class SQLiteStore(LocalStore):
 
         # Filter out tombstones if the resource was re-created in changed_res
         changed_paths = {r.path.canonical for r in changed_res}
-        deleted_hrefs = [
-            r["path"] for r in tomb_rows if r["path"] not in changed_paths
-        ]
+        deleted_hrefs = [r["path"] for r in tomb_rows if r["path"] not in changed_paths]
 
         # Handle limits and pagination
         total_count = len(changed_res) + len(deleted_hrefs)
