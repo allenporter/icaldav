@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Run automated RFC compliance test suites and verify coverage."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parent.parent
+
+    print("==========================================================================")
+    print("                Running CalDAV / WebDAV Compliance Suite                  ")
+    print("==========================================================================")
+
+    pytest_cmd = [sys.executable, "-m", "pytest", "tests/compliance/", "-v"]
+    res = subprocess.run(pytest_cmd, cwd=repo_root)
+    if res.returncode != 0:
+        print("[FAILED] Compliance test suite failed.", file=sys.stderr)
+        return res.returncode
+
+    print("\n==========================================================================")
+    print("                Verifying Groundtruth RFC Coverage                        ")
+    print("==========================================================================")
+    coverage_script = repo_root / "script" / "check-rfc-coverage"
+    res_cov = subprocess.run([sys.executable, str(coverage_script)], cwd=repo_root)
+    if res_cov.returncode != 0:
+        return res_cov.returncode
+
+    print("[SUCCESS] All RFC compliance test suites and coverage checks passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
