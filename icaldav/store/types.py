@@ -243,6 +243,44 @@ class LocalStore(Protocol):
         """
         ...
 
+    async def get_changes_since(
+        self,
+        collection: CollectionPath,
+        sync_token: str | None = None,
+        limit: int | None = None,
+    ) -> SyncChanges:
+        """Retrieve modified and deleted resources in a CollectionPath since a sync token.
+
+        RFC Reference:
+            - RFC 6578 Section 3.2: sync-collection Report.
+
+        Args:
+            collection: CollectionPath object for the calendar collection.
+            sync_token: The previous sync token, or None/empty for initial sync.
+            limit: Optional maximum number of results to return.
+
+        Returns:
+            SyncChanges containing changed resources, deleted hrefs, and the updated sync token.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class SyncChanges:
+    """Represents a delta synchronization result for a collection (RFC 6578).
+
+    Attributes:
+        sync_token: The new sync token representing this sync state.
+        changed: List of new or modified CalendarResource items.
+        deleted_hrefs: List of resource href strings deleted since the previous token.
+        has_more: Whether there are additional pages of changes available (for pagination limits).
+    """
+
+    sync_token: str
+    changed: list[CalendarResource]
+    deleted_hrefs: list[str]
+    has_more: bool = False
+
 
 class ResourceKind(StrEnum):
     """Resource entity classification for WebDAV/CalDAV resources."""

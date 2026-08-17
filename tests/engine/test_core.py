@@ -92,7 +92,6 @@ async def test_evaluate_propfind_calendar_collection() -> None:
     p_store = InMemoryPrincipalStore()
 
     await store.create_collection("/work")
-    await store.set_sync_token("/work", "token-123")
 
     # Add a resource in the collection
     res = CalendarResource(
@@ -101,6 +100,7 @@ async def test_evaluate_propfind_calendar_collection() -> None:
         ics_data=SAMPLE_VEVENT,
     )
     await store.save_resource(res)
+    await store.set_sync_token("/work", "token-123")
 
     # 1. Depth = 0 (only collection)
     query_d0 = PropfindQuery(
@@ -187,10 +187,20 @@ async def test_evaluate_propfind_missing_resource() -> None:
 
 @pytest.mark.asyncio
 async def test_evaluate_sync_collection() -> None:
-    """Test sync-collection evaluation returns active resources."""
+    """Test sync-collection evaluation returns active resources and tombstones."""
     engine = CoreWebDavEngine()
     store = MemoryStore()
     await store.create_collection("/work")
+
+    # Initial sync on empty collection
+    init_res = await engine.evaluate_sync_collection(
+        store, CollectionPath("/work"), SyncCollectionQuery(sync_token="")
+    )
+    assert len(init_res.responses) == 0
+    token_0 = init_res.sync_token
+    assert token_0 is not None
+
+    # Add resource
     res = CalendarResource(
         path=ResourcePath.parse("/work/event1.ics"),
         etag="etag-123",
@@ -198,7 +208,7 @@ async def test_evaluate_sync_collection() -> None:
     )
     await store.save_resource(res)
 
-    query = SyncCollectionQuery(sync_token="token-abc", limit=5)
+    query = SyncCollectionQuery(sync_token=token_0, limit=5)
     result = await engine.evaluate_sync_collection(
         store, CollectionPath("/work"), query
     )
@@ -206,6 +216,19 @@ async def test_evaluate_sync_collection() -> None:
     assert result.responses[0].href == "/work/event1.ics"
     assert result.responses[0].etag == "etag-123"
     assert result.responses[0].ics_data == SAMPLE_VEVENT
+    assert result.deleted_hrefs == []
+    token_1 = result.sync_token
+    assert token_1 is not None
+
+    # Delete resource
+    await store.delete_resource("/work/event1.ics")
+
+    # Sync since token_1 returns deleted tombstone
+    del_result = await engine.evaluate_sync_collection(
+        store, CollectionPath("/work"), SyncCollectionQuery(sync_token=token_1)
+    )
+    assert len(del_result.responses) == 0
+    assert del_result.deleted_hrefs == ["/work/event1.ics"]
 
 
 @pytest.mark.asyncio

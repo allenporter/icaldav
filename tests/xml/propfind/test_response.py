@@ -6,6 +6,7 @@ import pytest
 from syrupy.assertion import SnapshotAssertion
 
 from icaldav.store.principal import PrincipalInfo
+from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.namespaces import (
     CALDAV,
     CALSERVER,
@@ -15,7 +16,6 @@ from icaldav.xml.namespaces import (
     DavProp,
     strip_ns,
 )
-from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.response import (
     create_property_element,
     parse_multistatus_xml,

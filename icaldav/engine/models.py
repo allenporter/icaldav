@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from icaldav.filter import CompFilter, TimeRange
-from icaldav.store.types import ReportResource, ResourceKind
+from icaldav.store.types import ReportResource
 
 
 @dataclass(frozen=True)
@@ -144,3 +144,5 @@ class ReportMultiStatus:
 
     responses: list[ReportResource] = field(default_factory=list)
     missing_hrefs: list[str] = field(default_factory=list)
+    deleted_hrefs: list[str] = field(default_factory=list)
+    sync_token: str | None = None

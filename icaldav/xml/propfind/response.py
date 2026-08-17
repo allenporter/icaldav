@@ -12,6 +12,7 @@ from typing import Any
 
 from icaldav.engine.models import PropertyTag, WebDavMultiStatus
 from icaldav.store.principal import InMemoryPrincipalStore
+from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.namespaces import (
     CALDAV,
     CALSERVER,
@@ -23,7 +24,6 @@ from icaldav.xml.namespaces import (
     qname,
     strip_ns,
 )
-from icaldav.store.types import ResourceKind, ResourceTarget
 from icaldav.xml.propfind.models import (
     PropfindItem,
     Propstat,

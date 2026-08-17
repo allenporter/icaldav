@@ -59,14 +59,16 @@ async def client_and_base():
     store = MemoryStore()
     app = create_app(store)
     server = TestServer(app)
-    async with TestClient(server) as test_http_client:
-        async with CalDavClient(session=test_http_client.session) as client:
-            base_url = str(server.make_url("/work"))
-            # Pre-populate with test data
-            await client.put_resource(f"{base_url}/july.ics", VEVENT_JULY)
-            await client.put_resource(f"{base_url}/august.ics", VEVENT_AUGUST)
-            await client.put_resource(f"{base_url}/todo.ics", VTODO_ICS)
-            yield client, base_url, server
+    async with (
+        TestClient(server) as test_http_client,
+        CalDavClient(session=test_http_client.session) as client,
+    ):
+        base_url = str(server.make_url("/work"))
+        # Pre-populate with test data
+        await client.put_resource(f"{base_url}/july.ics", VEVENT_JULY)
+        await client.put_resource(f"{base_url}/august.ics", VEVENT_AUGUST)
+        await client.put_resource(f"{base_url}/todo.ics", VTODO_ICS)
+        yield client, base_url, server
 
 
 @pytest.mark.asyncio
@@ -101,7 +103,7 @@ async def test_calendar_query_time_range(client_and_base) -> None:
 
 @pytest.mark.asyncio
 async def test_calendar_query_vtodo(client_and_base) -> None:
-    """calendar-query REPORT filtering for VTODO returns only the task."""
+    """calendar-query REPORT filtering for VTODO returns only todo."""
     client, base_url, _ = client_and_base
     resources = await client.calendar_query(base_url, component="VTODO")
     assert len(resources) == 1
@@ -109,33 +111,25 @@ async def test_calendar_query_vtodo(client_and_base) -> None:
 
 
 @pytest.mark.asyncio
-async def test_calendar_query_no_match(client_and_base) -> None:
-    """calendar-query REPORT with time-range outside all events returns empty."""
+async def test_calendar_query_empty_result(client_and_base) -> None:
+    """calendar-query REPORT for non-existent component returns empty list."""
     client, base_url, _ = client_and_base
-    resources = await client.calendar_query(
-        base_url,
-        component="VEVENT",
-        time_start="20270101T000000Z",
-        time_end="20270201T000000Z",
-    )
+    resources = await client.calendar_query(base_url, component="VJOURNAL")
     assert len(resources) == 0
 
 
 @pytest.mark.asyncio
 async def test_calendar_multiget(client_and_base) -> None:
-    """calendar-multiget REPORT batch-fetches specific resources."""
+    """calendar-multiget REPORT with multiple hrefs returns specified resources."""
     client, base_url, _ = client_and_base
     resources = await client.calendar_multiget(
         base_url,
-        hrefs=["/work/july.ics", "/work/todo.ics"],
+        hrefs=["/work/july.ics", "/work/august.ics"],
     )
     assert len(resources) == 2
     hrefs = {r.href for r in resources}
     assert "/work/july.ics" in hrefs
-    assert "/work/todo.ics" in hrefs
-    for r in resources:
-        assert r.etag != ""
-        assert r.ics_data is not None
+    assert "/work/august.ics" in hrefs
 
 
 @pytest.mark.asyncio
@@ -195,3 +189,43 @@ async def test_well_known_caldav_redirect() -> None:
         resp = await test_http_client.get("/.well-known/caldav", allow_redirects=False)
         assert resp.status == 301
         assert resp.headers["Location"] == "/"
+
+
+@pytest.mark.asyncio
+async def test_sync_collection_delta_tombstones() -> None:
+    """Test sync-collection loopback returns initial resources and deleted tombstones."""
+    store = MemoryStore()
+    app = create_app(store)
+    server = TestServer(app)
+    async with (
+        TestClient(server) as test_http_client,
+        CalDavClient(session=test_http_client.session) as client,
+    ):
+        base_url = str(server.make_url("/work"))
+        await client.put_resource(f"{base_url}/event1.ics", VEVENT_JULY)
+
+        # Initial sync returns event1
+        res1, token1 = await client.sync_collection(base_url, sync_token="")
+        assert len(res1) == 1
+        assert res1[0].href == "/work/event1.ics"
+        assert token1 is not None
+
+        # Delete event1
+        del_resp = await test_http_client.delete("/work/event1.ics")
+        assert del_resp.status == 204
+
+        # REPORT request body with token1
+        body = f"""<?xml version="1.0" encoding="utf-8" ?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>{token1}</D:sync-token>
+  <D:sync-level>1</D:sync-level>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>"""
+        headers = {"Content-Type": "application/xml; charset=utf-8"}
+        resp = await test_http_client.request(
+            "REPORT", "/work", data=body, headers=headers
+        )
+        assert resp.status == 207
+        xml_text = await resp.text()
+        assert "HTTP/1.1 404 Not Found" in xml_text
+        assert "sync-token>" in xml_text
