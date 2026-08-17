@@ -5,8 +5,6 @@ Provides fast, transient storage for testing and in-memory calendar caching.
 
 from __future__ import annotations
 
-import re
-
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,

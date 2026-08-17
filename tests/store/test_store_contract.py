@@ -1,6 +1,7 @@
 """Shared LocalStore contract test suite verifying MemoryStore and SQLiteStore parity."""
 
 from collections.abc import AsyncGenerator
+
 import pytest
 
 from icaldav.store.memory import MemoryStore
@@ -32,7 +33,7 @@ END:VCALENDAR"""
 
 
 @pytest.fixture(params=["memory", "sqlite"])
-async def store(request: pytest.FixtureRequest) -> AsyncGenerator[LocalStore, None]:
+async def store(request: pytest.FixtureRequest) -> AsyncGenerator[LocalStore]:
     """Yield freshly initialized LocalStore instances for each backend."""
     if request.param == "memory":
         yield MemoryStore()
