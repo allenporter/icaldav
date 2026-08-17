@@ -41,7 +41,6 @@ async def test_rfc4918_propfind_depth_0_and_1(harness: ComplianceHarness) -> Non
 async def test_rfc4918_get_and_put_etags(harness: ComplianceHarness) -> None:
     """RFC 4918 §9.4 & §9.7: PUT creates resource with ETag; GET returns exact content and matching ETag."""
     await harness.test_client.request("MKCALENDAR", "/etag-test")
-    cal_url = f"{harness.base_url}etag-test"
 
     # PUT creates resource and returns ETag
     put_resp = await harness.test_client.put(
