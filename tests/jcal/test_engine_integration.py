@@ -5,7 +5,7 @@ import pytest
 from icaldav.engine.core import CoreWebDavEngine
 from icaldav.engine.models import CalendarQuery, PropertyTag, PropfindQuery
 from icaldav.filter import CompFilter
-from icaldav.jcal import JCalSerializer
+from icaldav.jcal.serializer import JCalSerializer
 from icaldav.store.memory import MemoryStore
 from icaldav.store.principal import InMemoryPrincipalStore
 from icaldav.store.types import CalendarResource, CollectionPath, ResourcePath
