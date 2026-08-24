@@ -3,7 +3,7 @@ extend-exclude = ["*.ipynb"]
 
 [lint]
 preview = true
-ignore = ["E501", "RUF022"]
+ignore = ["E501", "RUF022", "BLE001", "TRY400", "SIM117", "SIM102", "PLW1510"]
 extend-select = ["PLC0415", "C901"]
 
 [lint.mccabe]

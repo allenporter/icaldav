@@ -61,7 +61,7 @@ Requires Python 3.12+.
 ```python
 import asyncio
 from icaldav import CalDavClient, CalDavSyncManager
-from icaldav.store import SQLiteStore
+from icaldav.store.sqlite import SQLiteStore
 
 
 async def main():

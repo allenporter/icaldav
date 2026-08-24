@@ -66,7 +66,7 @@ class AuthNegotiator:
                     methods.append(method)
                 return methods
         except aiohttp.ClientError:
-            _LOGGER.error("Connection error probing %s", url, exc_info=True)
+            _LOGGER.exception("Connection error probing %s", url)
             raise
 
     def _parse_challenges(

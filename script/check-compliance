@@ -19,7 +19,9 @@ def main() -> int:
         print("[FAILED] Compliance test suite failed.", file=sys.stderr)
         return res.returncode
 
-    print("\n==========================================================================")
+    print(
+        "\n=========================================================================="
+    )
     print("                Verifying Groundtruth RFC Coverage                        ")
     print("==========================================================================")
     coverage_script = repo_root / "script" / "check-rfc-coverage"

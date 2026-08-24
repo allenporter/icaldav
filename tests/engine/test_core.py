@@ -53,10 +53,20 @@ async def test_evaluate_propfind_root() -> None:
 
 @pytest.mark.asyncio
 async def test_evaluate_propfind_principal() -> None:
-    """Test PROPFIND on a principal path."""
+    """Test PROPFIND on a principal path with display_name set."""
     engine = CoreWebDavEngine()
     store = MemoryStore()
-    p_store = InMemoryPrincipalStore()
+    p_store = InMemoryPrincipalStore(
+        principals=[
+            PrincipalInfo(
+                user_id="user",
+                principal_path="/principals/user/",
+                calendar_home_path="/",
+                email="mailto:user@localhost",
+                display_name="User Display Name",
+            )
+        ]
+    )
 
     query = PropfindQuery(
         href="/principals/user/",
@@ -78,10 +88,51 @@ async def test_evaluate_propfind_principal() -> None:
         "collection",
         "principal",
     ]
-    assert ok_block.properties[PropertyTag(DAV, "displayname")] == "user"
+    assert ok_block.properties[PropertyTag(DAV, "displayname")] == "User Display Name"
 
     err_block = next(b for b in resp.propstats if b.status_code == 404)
     assert PropertyTag(DAV, "nonexistent") in err_block.properties
+
+
+@pytest.mark.asyncio
+async def test_evaluate_propfind_principal_without_displayname() -> None:
+    """Test PROPFIND on a principal path where display_name is not set (404 for displayname)."""
+    engine = CoreWebDavEngine()
+    store = MemoryStore()
+    p_store = InMemoryPrincipalStore(
+        principals=[
+            PrincipalInfo(
+                user_id="user",
+                principal_path="/principals/user/",
+                calendar_home_path="/",
+                email="mailto:user@localhost",
+                display_name=None,
+            )
+        ]
+    )
+
+    query = PropfindQuery(
+        href="/principals/user/",
+        depth=0,
+        requested_props=[
+            PropertyTag(DAV, "resourcetype"),
+            PropertyTag(DAV, "displayname"),
+        ],
+        user_id="user",
+    )
+    result = await engine.evaluate_propfind(store, p_store, query)
+    assert len(result.responses) == 1
+    resp = result.responses[0]
+
+    ok_block = next(b for b in resp.propstats if b.status_code == 200)
+    assert ok_block.properties[PropertyTag(DAV, "resourcetype")] == [
+        "collection",
+        "principal",
+    ]
+    assert PropertyTag(DAV, "displayname") not in ok_block.properties
+
+    err_block = next(b for b in resp.propstats if b.status_code == 404)
+    assert PropertyTag(DAV, "displayname") in err_block.properties
 
 
 @pytest.mark.asyncio
