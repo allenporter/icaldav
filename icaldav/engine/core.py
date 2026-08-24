@@ -88,14 +88,14 @@ def _resolve_sync_token(ctx: ResourceTarget) -> str | None:
     return ctx.sync_token
 
 
-def _resolve_displayname(ctx: ResourceTarget) -> str:
+def _resolve_displayname(ctx: ResourceTarget) -> str | None:
     if ctx.kind == ResourceKind.ROOT:
         return "root"
     elif ctx.kind == ResourceKind.PRINCIPAL and ctx.principal:
-        return ctx.principal.display_name or ctx.principal.user_id
+        return ctx.principal.display_name
     elif ctx.kind == ResourceKind.CALENDAR and ctx.displayname:
         return ctx.displayname
-    return ""
+    return None
 
 
 def _resolve_calendar_home_set(ctx: ResourceTarget) -> str | None:
