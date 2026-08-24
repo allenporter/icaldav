@@ -44,3 +44,13 @@ CREATE TABLE IF NOT EXISTS principals (
 CREATE INDEX IF NOT EXISTS idx_resources_collection ON resources(collection_path);
 CREATE INDEX IF NOT EXISTS idx_tombstones_collection ON tombstones(collection_path);
 CREATE INDEX IF NOT EXISTS idx_principals_email ON principals(email);
+
+CREATE TABLE IF NOT EXISTS properties (
+    path TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (path, namespace, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_properties_path ON properties(path);

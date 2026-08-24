@@ -19,6 +19,27 @@ from icaldav.store.principal import PrincipalInfo
 
 
 @dataclass(frozen=True)
+class PropertyTag:
+    """Represents a namespace-qualified WebDAV/CalDAV property tag name.
+
+    Attributes:
+        namespace: The XML namespace URI (e.g. "DAV:" or "urn:ietf:params:xml:ns:caldav").
+        name: The local element tag name (e.g. "getetag", "displayname").
+    """
+
+    namespace: str
+    name: str
+
+    @property
+    def clark_name(self) -> str:
+        """Return the Clark notation representation '{namespace}name'."""
+        return f"{{{self.namespace}}}{self.name}"
+
+    def __str__(self) -> str:
+        return self.clark_name
+
+
+@dataclass(frozen=True)
 class CollectionPath:
     """Strongly-typed, immutable value object for a normalized CalDAV collection URI path."""
 
@@ -264,6 +285,82 @@ class LocalStore(Protocol):
         """
         ...
 
+    async def copy_resource(
+        self,
+        source: ResourcePath,
+        destination: ResourcePath,
+        overwrite: bool = True,
+    ) -> bool:
+        """Copy a calendar resource from source to destination path.
+
+        RFC Reference:
+            - RFC 4918 Section 9.8: COPY Method.
+
+        Args:
+            source: ResourcePath of the resource to copy.
+            destination: ResourcePath of the target location.
+            overwrite: If True, overwrite existing destination resource.
+
+        Returns:
+            True if an existing destination resource was overwritten, False if created new.
+        """
+        ...
+
+    async def move_resource(
+        self,
+        source: ResourcePath,
+        destination: ResourcePath,
+        overwrite: bool = True,
+    ) -> bool:
+        """Move a calendar resource from source to destination path.
+
+        RFC Reference:
+            - RFC 4918 Section 9.9: MOVE Method.
+
+        Args:
+            source: ResourcePath of the resource to move.
+            destination: ResourcePath of the target location.
+            overwrite: If True, overwrite existing destination resource.
+
+        Returns:
+            True if an existing destination resource was overwritten, False if created new.
+        """
+        ...
+
+    async def get_properties(
+        self, path: CollectionPath | ResourcePath
+    ) -> dict[PropertyTag, str]:
+        """Retrieve custom dead properties for a collection or resource path.
+
+        RFC Reference:
+            - RFC 4918 Section 9.2: PROPPATCH Method.
+
+        Args:
+            path: Target CollectionPath or ResourcePath.
+
+        Returns:
+            Mapping of PropertyTag to string property value.
+        """
+        ...
+
+    async def set_properties(
+        self,
+        path: CollectionPath | ResourcePath,
+        set_props: dict[PropertyTag, str],
+        remove_props: list[PropertyTag] | None = None,
+    ) -> None:
+        """Set or remove custom dead properties on a collection or resource path.
+
+        RFC Reference:
+            - RFC 4918 Section 9.2: PROPPATCH Method.
+
+        Args:
+            path: Target CollectionPath or ResourcePath.
+            set_props: Mapping of PropertyTag to new string property value.
+            remove_props: Optional list of PropertyTag items to delete.
+        """
+        ...
+
 
 @dataclass(frozen=True)
 class SyncToken:
@@ -378,6 +475,7 @@ class ResourceTarget:
         ctag: Optional collection change tag string for fast client sync diffing.
         sync_token: Optional synchronization token URI for RFC 6578 WebDAV Sync.
         principal: Optional PrincipalInfo metadata object for WebDAV autodiscovery properties.
+        custom_properties: Optional mapping of custom property tags to string values.
     """
 
     href: str
@@ -387,6 +485,7 @@ class ResourceTarget:
     ctag: str | None = None
     sync_token: str | None = None
     principal: PrincipalInfo | None = None
+    custom_properties: dict[PropertyTag, str] | None = None
 
 
 @dataclass

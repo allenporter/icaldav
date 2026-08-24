@@ -23,9 +23,9 @@ sections:
     requirements:
       - id: "REQ-4918-9.2-1"
         summary: "Must process <DAV:propertyupdate> requests to set or remove dead WebDAV properties."
-        status: "not_implemented"
-        maturity: "not_implemented"
-        details: "PROPPATCH method is not yet implemented."
+        status: "implemented"
+        maturity: "production_grade"
+        details: "PROPPATCH parses <DAV:propertyupdate> with <DAV:set> and <DAV:remove>, updates dead custom properties or rejects protected live properties with 403; verified by unit and compliance tests."
 
   - id: "9.3"
     title: "MKCOL Method"
@@ -77,18 +77,18 @@ sections:
     requirements:
       - id: "REQ-4918-9.8-1"
         summary: "Must support copying resources or collections between URI locations."
-        status: "not_implemented"
-        maturity: "not_implemented"
-        details: "COPY method is not yet implemented."
+        status: "implemented"
+        maturity: "production_grade"
+        details: "COPY method duplicates resources across collections with Destination and Overwrite header handling; verified by unit and compliance tests."
 
   - id: "9.9"
     title: "MOVE Method"
     requirements:
       - id: "REQ-4918-9.9-1"
         summary: "Must support moving/renaming resources or collections between URI locations."
-        status: "not_implemented"
-        maturity: "not_implemented"
-        details: "MOVE method is not yet implemented."
+        status: "implemented"
+        maturity: "production_grade"
+        details: "MOVE method relocates resources across collections with Destination and Overwrite header handling; verified by unit and compliance tests."
 
   - id: "9.10"
     title: "LOCK and UNLOCK Methods"
@@ -104,6 +104,6 @@ sections:
     requirements:
       - id: "REQ-4918-14.11-1"
         summary: "Must return DAV:displayname property on collection resources."
-        status: "partially_implemented"
-        maturity: "prototype"
-        details: "PROPFIND responses include collection display name element; persistent custom property modification pending PROPPATCH."
+        status: "implemented"
+        maturity: "production_grade"
+        details: "DAV:displayname is returned on collections and can be updated persistently via PROPPATCH; verified by compliance tests."

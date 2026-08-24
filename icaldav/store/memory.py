@@ -9,6 +9,7 @@ from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
     LocalStore,
+    PropertyTag,
     ResourcePath,
     SyncChanges,
     SyncToken,
@@ -35,6 +36,8 @@ class MemoryStore(LocalStore):
         self._token_counters: dict[CollectionPath, int] = {}
         # CollectionPath -> custom sync_token string
         self._custom_tokens: dict[CollectionPath, str] = {}
+        # path string -> {PropertyTag -> str}
+        self._properties: dict[str, dict[PropertyTag, str]] = {}
 
     def _next_counter(self, coll: CollectionPath) -> int:
         curr = self._token_counters.get(coll, 0) + 1
@@ -228,3 +231,91 @@ class MemoryStore(LocalStore):
         if st.sequence == 0:
             return self._initial_sync_changes(coll, curr_token_str, limit)
         return self._delta_sync_changes(coll, st.sequence, curr_token_str, limit)
+
+    async def copy_resource(
+        self,
+        source: ResourcePath | str,
+        destination: ResourcePath | str,
+        overwrite: bool = True,
+    ) -> bool:
+        """Copy a calendar resource from source to destination path."""
+        src_path = ResourcePath.parse(source)
+        dst_path = ResourcePath.parse(destination)
+
+        src_res = await self.get_resource(src_path)
+        if src_res is None:
+            raise FileNotFoundError(f"Source resource not found: {src_path}")
+
+        if not await self.collection_exists(dst_path.collection_path):
+            raise FileNotFoundError(
+                f"Destination collection does not exist: {dst_path.collection_path}"
+            )
+
+        existing_dst = await self.get_resource(dst_path)
+        if existing_dst is not None:
+            if not overwrite:
+                raise FileExistsError(
+                    f"Destination resource already exists: {dst_path}"
+                )
+            overwritten = True
+        else:
+            overwritten = False
+
+        new_res = CalendarResource(
+            path=dst_path,
+            etag=src_res.etag,
+            ics_data=src_res.ics_data,
+            uid=src_res.uid,
+        )
+        await self.save_resource(new_res)
+
+        # Copy custom dead properties if any
+        if src_path.canonical in self._properties:
+            self._properties[dst_path.canonical] = dict(
+                self._properties[src_path.canonical]
+            )
+
+        return overwritten
+
+    async def move_resource(
+        self,
+        source: ResourcePath | str,
+        destination: ResourcePath | str,
+        overwrite: bool = True,
+    ) -> bool:
+        """Move a calendar resource from source to destination path."""
+        src_path = ResourcePath.parse(source)
+        dst_path = ResourcePath.parse(destination)
+
+        overwritten = await self.copy_resource(src_path, dst_path, overwrite=overwrite)
+        await self.delete_resource(src_path)
+
+        if src_path.canonical in self._properties:
+            props = self._properties.pop(src_path.canonical, {})
+            self._properties[dst_path.canonical] = props
+
+        return overwritten
+
+    async def get_properties(
+        self, path: CollectionPath | ResourcePath | str
+    ) -> dict[PropertyTag, str]:
+        """Retrieve custom dead properties for a collection or resource path."""
+        p_str = str(path)
+        return dict(self._properties.get(p_str, {}))
+
+    async def set_properties(
+        self,
+        path: CollectionPath | ResourcePath | str,
+        set_props: dict[PropertyTag, str],
+        remove_props: list[PropertyTag] | None = None,
+    ) -> None:
+        """Set or remove custom dead properties on a collection or resource path."""
+        p_str = str(path)
+        if p_str not in self._properties:
+            self._properties[p_str] = {}
+
+        for k, v in set_props.items():
+            self._properties[p_str][k] = v
+
+        for k in remove_props or []:
+            self._properties[p_str].pop(k, None)

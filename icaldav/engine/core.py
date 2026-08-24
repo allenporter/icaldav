@@ -147,6 +147,43 @@ RESOLVER_REGISTRY = {
 }
 
 
+def _resolve_all_props(
+    ctx: ResourceTarget,
+) -> dict[PropertyTag, str | list[str] | list[PropertyTag]]:
+    ok_props: dict[PropertyTag, str | list[str] | list[PropertyTag]] = {}
+    for (ns, name), resolver in RESOLVER_REGISTRY.items():
+        val = resolver(ctx)
+        if val is not None:
+            ok_props[PropertyTag(ns, name)] = val
+    if ctx.custom_properties:
+        for tag, custom_val in ctx.custom_properties.items():
+            if tag not in ok_props:
+                ok_props[tag] = custom_val
+    return ok_props
+
+
+def _resolve_explicit_props(
+    ctx: ResourceTarget,
+    requested_props: list[PropertyTag],
+) -> tuple[
+    dict[PropertyTag, str | list[str] | list[PropertyTag]], dict[PropertyTag, str]
+]:
+    ok_props: dict[PropertyTag, str | list[str] | list[PropertyTag]] = {}
+    err_props: dict[PropertyTag, str] = {}
+    for tag in requested_props:
+        resolver = RESOLVER_REGISTRY.get((tag.namespace, tag.name))
+        if resolver is not None:
+            val = resolver(ctx)
+            if val is not None:
+                ok_props[tag] = val
+                continue
+        if ctx.custom_properties and tag in ctx.custom_properties:
+            ok_props[tag] = ctx.custom_properties[tag]
+            continue
+        err_props[tag] = ""
+    return ok_props, err_props
+
+
 class CoreWebDavEngine:
     """Logical execution core evaluating WebDAV and CalDAV query specifications."""
 
@@ -156,24 +193,11 @@ class CoreWebDavEngine:
         requested_props: list[PropertyTag] | None,
     ) -> WebDavResourceStatus:
         """Evaluate properties of a specific Target context, returning structured status block."""
-        # If no properties were explicitly requested, default to all registry keys
-        props_to_resolve = (
-            requested_props
-            if requested_props is not None
-            else [PropertyTag(ns, name) for ns, name in RESOLVER_REGISTRY]
-        )
-
-        ok_props = {}
-        err_props = {}
-
-        for tag in props_to_resolve:
-            resolver = RESOLVER_REGISTRY.get((tag.namespace, tag.name))
-            if resolver is not None:
-                val = resolver(ctx)
-                if val is not None:
-                    ok_props[tag] = val
-                    continue
-            err_props[tag] = ""
+        if requested_props is None:
+            ok_props = _resolve_all_props(ctx)
+            err_props: dict[PropertyTag, str] = {}
+        else:
+            ok_props, err_props = _resolve_explicit_props(ctx, requested_props)
 
         blocks = []
         if ok_props:
@@ -210,6 +234,7 @@ class CoreWebDavEngine:
         sync_token: str | None = None
         displayname: str | None = None
 
+        custom_props: dict[PropertyTag, str] = {}
         if href.startswith("/principals/"):
             kind = ResourceKind.PRINCIPAL
         elif href == "/":
@@ -220,7 +245,10 @@ class CoreWebDavEngine:
             if len(segments) <= 1:
                 kind = ResourceKind.CALENDAR
                 sync_token = await store.get_sync_token(coll_path)
-                displayname = coll_path.path.strip("/")
+                custom_props = await store.get_properties(coll_path)
+                displayname = custom_props.get(
+                    PropertyTag(DAV, DavProp.DISPLAYNAME)
+                ) or coll_path.path.strip("/")
             else:
                 res_path = ResourcePath.parse(href)
                 res = await store.get_resource(res_path)
@@ -228,6 +256,7 @@ class CoreWebDavEngine:
                     raise FileNotFoundError(f"Resource not found: {href}")
                 kind = ResourceKind.RESOURCE
                 etag = res.etag
+                custom_props = await store.get_properties(res_path)
 
         # 1. Evaluate target itself
         ctx = ResourceTarget(
@@ -237,6 +266,7 @@ class CoreWebDavEngine:
             etag=etag,
             sync_token=sync_token,
             displayname=displayname,
+            custom_properties=custom_props,
         )
         responses.append(self._evaluate_target(ctx, query.requested_props))
 
@@ -245,11 +275,13 @@ class CoreWebDavEngine:
             coll_path = CollectionPath.parse(href)
             resources = await store.get_resources(coll_path)
             for res in resources:
+                child_props = await store.get_properties(res.path)
                 child_ctx = ResourceTarget(
                     href=res.href,
                     kind=ResourceKind.RESOURCE,
                     principal=principal,
                     etag=res.etag,
+                    custom_properties=child_props,
                 )
                 responses.append(
                     self._evaluate_target(child_ctx, query.requested_props)

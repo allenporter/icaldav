@@ -18,6 +18,7 @@ from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
     LocalStore,
+    PropertyTag,
     ResourcePath,
     SyncChanges,
     SyncToken,
@@ -437,4 +438,166 @@ class SQLiteStore(LocalStore):
             coll.canonical,
             sync_token,
             limit,
+        )
+
+    def _sync_copy_resource(self, src_str: str, dst_str: str, overwrite: bool) -> bool:
+        conn = self._get_connection()
+        dst_path = ResourcePath.parse(dst_str)
+        dst_coll_str = dst_path.collection_path.canonical
+
+        s_row = conn.execute(
+            "SELECT path, etag, ics_data, uid FROM resources WHERE path = ?",
+            (src_str,),
+        ).fetchone()
+        if s_row is None:
+            raise FileNotFoundError(f"Source resource not found: {src_str}")
+
+        coll_row = conn.execute(
+            "SELECT sync_token_counter FROM collections WHERE path = ?",
+            (dst_coll_str,),
+        ).fetchone()
+        if coll_row is None:
+            raise FileNotFoundError(
+                f"Destination collection does not exist: {dst_coll_str}"
+            )
+
+        d_row = conn.execute(
+            "SELECT path FROM resources WHERE path = ?",
+            (dst_str,),
+        ).fetchone()
+        if d_row is not None:
+            if not overwrite:
+                raise FileExistsError(f"Destination resource already exists: {dst_str}")
+            overwritten = True
+        else:
+            overwritten = False
+
+        new_counter = coll_row["sync_token_counter"] + 1
+        conn.execute(
+            "UPDATE collections SET sync_token_counter = ? WHERE path = ?",
+            (new_counter, dst_coll_str),
+        )
+
+        conn.execute(
+            """
+            INSERT INTO resources (path, collection_path, etag, ics_data, uid, token_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                etag = excluded.etag,
+                ics_data = excluded.ics_data,
+                uid = excluded.uid,
+                token_id = excluded.token_id,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                dst_str,
+                dst_coll_str,
+                s_row["etag"],
+                s_row["ics_data"],
+                s_row["uid"],
+                new_counter,
+            ),
+        )
+
+        # Copy custom properties
+        conn.execute("DELETE FROM properties WHERE path = ?", (dst_str,))
+        conn.execute(
+            """
+            INSERT INTO properties (path, namespace, name, value)
+            SELECT ?, namespace, name, value FROM properties WHERE path = ?
+            """,
+            (dst_str, src_str),
+        )
+
+        return overwritten
+
+    async def copy_resource(
+        self,
+        source: ResourcePath | str,
+        destination: ResourcePath | str,
+        overwrite: bool = True,
+    ) -> bool:
+        """Copy a calendar resource from source to destination path."""
+        src_path = ResourcePath.parse(source)
+        dst_path = ResourcePath.parse(destination)
+        return await self._execute_sync(
+            self._sync_copy_resource,
+            src_path.canonical,
+            dst_path.canonical,
+            overwrite,
+        )
+
+    def _sync_move_resource(self, src_str: str, dst_str: str, overwrite: bool) -> bool:
+        overwritten = self._sync_copy_resource(src_str, dst_str, overwrite)
+        self._sync_delete_resource(src_str)
+        conn = self._get_connection()
+        conn.execute("DELETE FROM properties WHERE path = ?", (src_str,))
+        return overwritten
+
+    async def move_resource(
+        self,
+        source: ResourcePath | str,
+        destination: ResourcePath | str,
+        overwrite: bool = True,
+    ) -> bool:
+        """Move a calendar resource from source to destination path."""
+        src_path = ResourcePath.parse(source)
+        dst_path = ResourcePath.parse(destination)
+        return await self._execute_sync(
+            self._sync_move_resource,
+            src_path.canonical,
+            dst_path.canonical,
+            overwrite,
+        )
+
+    def _sync_get_properties(self, path_str: str) -> dict[PropertyTag, str]:
+        conn = self._get_connection()
+        rows = conn.execute(
+            "SELECT namespace, name, value FROM properties WHERE path = ?",
+            (path_str,),
+        ).fetchall()
+        return {PropertyTag(r["namespace"], r["name"]): r["value"] for r in rows}
+
+    async def get_properties(
+        self, path: CollectionPath | ResourcePath | str
+    ) -> dict[PropertyTag, str]:
+        """Retrieve custom dead properties for a collection or resource path."""
+        p_str = str(path)
+        return await self._execute_sync(self._sync_get_properties, p_str)
+
+    def _sync_set_properties(
+        self,
+        path_str: str,
+        set_props: dict[PropertyTag, str],
+        remove_props: list[PropertyTag] | None,
+    ) -> None:
+        conn = self._get_connection()
+        for tag, val in set_props.items():
+            conn.execute(
+                """
+                INSERT INTO properties (path, namespace, name, value)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(path, namespace, name) DO UPDATE SET value = excluded.value
+                """,
+                (path_str, tag.namespace, tag.name, val),
+            )
+        for tag in remove_props or []:
+            conn.execute(
+                "DELETE FROM properties WHERE path = ? AND namespace = ? AND name = ?",
+                (path_str, tag.namespace, tag.name),
+            )
+
+    async def set_properties(
+        self,
+        path: CollectionPath | ResourcePath | str,
+        set_props: dict[PropertyTag, str],
+        remove_props: list[PropertyTag] | None = None,
+    ) -> None:
+        """Set or remove custom dead properties on a collection or resource path."""
+        p_str = str(path)
+        await self._execute_sync(
+            self._sync_set_properties,
+            p_str,
+            set_props,
+            remove_props,
         )

@@ -12,7 +12,7 @@ from aiohttp import web
 async def handle_options(request: web.Request) -> web.Response:
     """Handle OPTIONS request advertising WebDAV and CalDAV capabilities."""
     headers = {
-        "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR",
+        "Allow": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, COPY, MOVE, REPORT, MKCALENDAR",
         "DAV": "1, calendar-access",
     }
     return web.Response(status=200, headers=headers)
