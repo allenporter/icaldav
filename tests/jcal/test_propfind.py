@@ -109,3 +109,58 @@ def test_build_and_parse_multistatus_json() -> None:
     restored_ics = p200.properties[PropertyTag(CALDAV, "calendar-data")]
     assert "BEGIN:VCALENDAR" in restored_ics
     assert "SUMMARY:Meeting" in restored_ics
+
+
+def test_parse_propfind_edge_cases() -> None:
+    """Verify parse_propfind_request_json with empty/invalid/custom formats."""
+    assert parse_propfind_request_json(b"") is None
+    assert parse_propfind_request_json("   ") is None
+    assert parse_propfind_request_json("{invalid_json}") is None
+    assert parse_propfind_request_json(123) is None  # type: ignore[arg-type]
+
+    # Bare array format
+    bare_array = json.dumps(["{DAV:}getetag", "{DAV:}displayname"])
+    res = parse_propfind_request_json(bare_array)
+    assert res == [PropertyTag(DAV, "getetag"), PropertyTag(DAV, "displayname")]
+
+    # Dict with object-style tag definitions
+    obj_style = json.dumps(
+        {
+            "props": [
+                {"namespace": "DAV:", "name": "resourcetype"},
+                "displayname",
+            ]
+        }
+    )
+    res_obj = parse_propfind_request_json(obj_style)
+    assert res_obj == [
+        PropertyTag(DAV, "resourcetype"),
+        PropertyTag(DAV, "displayname"),
+    ]
+
+
+def test_multistatus_json_without_conversion() -> None:
+    """Verify WebDavMultiStatus without calendar-data jCal conversion."""
+    sample_ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR"
+    multistatus = WebDavMultiStatus(
+        responses=[
+            WebDavResourceStatus(
+                href="/work/event.ics",
+                propstats=[
+                    PropstatBlock(
+                        status_code=200,
+                        properties={
+                            PropertyTag(CALDAV, "calendar-data"): sample_ics,
+                        },
+                    )
+                ],
+            )
+        ]
+    )
+    json_bytes = build_multistatus_json(multistatus, convert_calendar_data=False)
+    doc = json.loads(json_bytes)
+    prop_val = doc["responses"][0]["propstats"][0]["properties"][
+        "{urn:ietf:params:xml:ns:caldav}calendar-data"
+    ]
+    assert isinstance(prop_val, str)
+    assert "BEGIN:VCALENDAR" in prop_val

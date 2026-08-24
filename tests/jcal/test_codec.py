@@ -196,3 +196,97 @@ def test_parser_validation_errors() -> None:
 
     with pytest.raises(ValueError):
         _parse_float_val("not_a_float")
+
+
+def test_line_folding_and_unfolding() -> None:
+    """Verify long lines are folded to 75 octets and unfolded properly."""
+    long_desc = "A" * 150
+    ics = (
+        f"BEGIN:VCALENDAR\r\n"
+        f"BEGIN:VEVENT\r\n"
+        f"UID:long-line-test\r\n"
+        f"DESCRIPTION:{long_desc}\r\n"
+        f"END:VEVENT\r\n"
+        f"END:VCALENDAR"
+    )
+    jcal = ics_to_jcal(ics)
+    assert jcal[2][0][1][1][3] == long_desc
+
+    rebuilt = jcal_to_ics(jcal)
+    # Ensure lines are split and folded with CRLF + space
+    assert "\r\n " in rebuilt
+
+    # Ensure roundtrip preserves exact string
+    restored_jcal = ics_to_jcal(rebuilt)
+    assert restored_jcal[2][0][1][1][3] == long_desc
+
+
+def test_multivalued_and_parameter_quoting() -> None:
+    """Verify multi-valued properties and parameters containing special characters."""
+    ics = (
+        "BEGIN:VCALENDAR\r\n"
+        "BEGIN:VEVENT\r\n"
+        "UID:multi-param-test\r\n"
+        "CATEGORIES:DEV,TEST,RELEASE\r\n"
+        'ATTENDEE;CN="Doe, Jane; Special":mailto:jane@example.com\r\n'
+        "DTSTART;VALUE=DATE:20260817\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR"
+    )
+    jcal = ics_to_jcal(ics)
+    vprops = jcal[2][0][1]
+
+    cat_prop = next(p for p in vprops if p[0] == "categories")
+    assert cat_prop[3:] == ["DEV", "TEST", "RELEASE"]
+
+    att_prop = next(p for p in vprops if p[0] == "attendee")
+    assert att_prop[1]["cn"] == "Doe, Jane; Special"
+
+    dt_prop = next(p for p in vprops if p[0] == "dtstart")
+    assert dt_prop[2] == "date"
+    assert dt_prop[3] == "2026-08-17"
+
+    rebuilt = jcal_to_ics(jcal)
+    assert "CATEGORIES:DEV,TEST,RELEASE" in rebuilt
+    assert "VALUE=DATE" in rebuilt
+    assert "DTSTART;VALUE=DATE:20260817" in rebuilt
+
+
+def test_malformed_jcal_handling() -> None:
+    """Verify empty/malformed inputs to jcal_to_ics return empty string."""
+    assert jcal_to_ics([]) == ""
+    assert jcal_to_ics(["vcalendar"]) == ""
+    assert jcal_to_ics(None) == ""  # type: ignore[arg-type]
+
+
+def test_recurrence_advanced_and_boolean_properties() -> None:
+    """Verify complex recurrence rules, booleans, and list parameters."""
+    ics = (
+        "BEGIN:VCALENDAR\r\n"
+        "BEGIN:VEVENT\r\n"
+        "UID:advanced-rrule\r\n"
+        "DTSTART:20260817T1430\r\n"
+        "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20261231T235959Z;BYHOUR=9,17;BYMINUTE=30\r\n"
+        "ATTENDEE;MEMBER=group1,group2:mailto:user@example.com\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR"
+    )
+    jcal = ics_to_jcal(ics)
+    vprops = jcal[2][0][1]
+
+    rrule = next(p for p in vprops if p[0] == "rrule")[3]
+    assert rrule["freq"] == "DAILY"
+    assert rrule["interval"] == 2
+    assert rrule["until"] == "2026-12-31T23:59:59Z"
+    assert rrule["byhour"] == [9, 17]
+    assert rrule["byminute"] == 30
+
+    att = next(p for p in vprops if p[0] == "attendee")
+    assert att[1]["member"] == ["group1", "group2"]
+
+    rebuilt = jcal_to_ics(jcal)
+    assert "FREQ=DAILY" in rebuilt
+    assert "INTERVAL=2" in rebuilt
+    assert "UNTIL=20261231T235959Z" in rebuilt
+    assert "BYHOUR=9,17" in rebuilt
+    assert "BYMINUTE=30" in rebuilt

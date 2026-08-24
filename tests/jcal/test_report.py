@@ -140,3 +140,58 @@ def test_report_multi_status_json_roundtrip() -> None:
     assert restored.responses[0].href == "/work/rep-1.ics"
     assert restored.responses[0].ics_data is not None
     assert "BEGIN:VCALENDAR" in restored.responses[0].ics_data
+
+
+def test_report_multi_status_without_jcal_conversion() -> None:
+    """Verify ReportMultiStatus serialization without jCal conversion."""
+    sample_ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR"
+    status = ReportMultiStatus(
+        responses=[
+            ReportResource(href="/work/rep.ics", etag='"etag-1"', ics_data=sample_ics)
+        ]
+    )
+    data = build_report_response_json(status, convert_ics_to_jcal=False)
+    doc = json.loads(data)
+    assert doc["responses"][0]["calendar_data"] == sample_ics
+    assert "jcal" not in doc["responses"][0]
+
+    restored = parse_report_response_json(doc)
+    assert len(restored.responses) == 1
+    assert restored.responses[0].ics_data == sample_ics
+
+    # Also test passing a list of ReportResource with missing_hrefs
+    list_bytes = build_report_response_json(
+        [ReportResource(href="/work/item.ics", etag='"e"', ics_data=sample_ics)],
+        missing_hrefs=["/work/missing.ics"],
+    )
+    doc_list = json.loads(list_bytes)
+    assert doc_list["missing_hrefs"] == ["/work/missing.ics"]
+
+
+def test_report_query_dict_input_variations() -> None:
+    """Verify report parser functions accept dict input directly."""
+    # Calendar query without time range
+    cq_dict = {
+        "comp_filter": {"name": "VCALENDAR"},
+        "props": ["{DAV:}getetag"],
+    }
+    cq = parse_calendar_query_json(cq_dict)
+    assert cq.comp_filter.name == "VCALENDAR"
+    assert cq.time_range is None
+
+    # Sync collection query without limit
+    sync_dict = {"sync_token": "token-only"}
+    sync_q = parse_sync_collection_json(sync_dict)
+    assert sync_q.sync_token == "token-only"
+    assert sync_q.limit is None
+
+    # Principal search query with dict input
+    ps_dict = {
+        "criteria": [{"prop_tag": "displayname", "match": "bob"}],
+        "props": ["{DAV:}displayname"],
+        "user_id": "bob",
+    }
+    ps_q = parse_principal_search_json(ps_dict)
+    assert len(ps_q.criteria) == 1
+    assert ps_q.criteria[0].match == "bob"
+    assert ps_q.user_id == "bob"

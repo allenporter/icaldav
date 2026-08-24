@@ -329,6 +329,17 @@ def _process_property_entry(
     return [name, params, val_type, converted_val]
 
 
+def _split_line(line: str) -> tuple[str, str] | None:
+    """Split an iCalendar line into (header, val_str) at the first unquoted colon."""
+    in_quote = False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            in_quote = not in_quote
+        elif ch == ":" and not in_quote:
+            return line[:i], line[i + 1 :]
+    return None
+
+
 def ics_to_jcal(ics_text: str) -> list[Any]:
     """Convert RFC 5545 iCalendar text into RFC 7265 jCal JSON data structure.
 
@@ -344,9 +355,10 @@ def ics_to_jcal(ics_text: str) -> list[Any]:
     root: list[Any] | None = None
 
     for line in lines:
-        if ":" not in line:
+        split_res = _split_line(line)
+        if split_res is None:
             continue
-        header, val_str = line.split(":", 1)
+        header, val_str = split_res
         header_parts = header.split(";", 1)
         name = header_parts[0].strip().lower()
         param_str = header_parts[1] if len(header_parts) > 1 else ""
