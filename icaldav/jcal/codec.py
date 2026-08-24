@@ -8,8 +8,12 @@ RFC References:
     - RFC 7265: jCal: The JSON Format for iCalendar
 """
 
+from collections.abc import Callable
 import re
 from typing import Any
+
+type JCalRecur = dict[str, str | int | list[int] | list[str]]
+type JCalScalar = str | int | float | list[float] | bool | JCalRecur
 
 # Default property value types according to RFC 7265 Section 3.5 & RFC 5545
 PROPERTY_TYPES: dict[str, str] = {
@@ -140,34 +144,28 @@ def _parse_utc_offset_to_ics(val: str) -> str:
     return val.replace(":", "").strip()
 
 
-def _parse_int_val(v: str) -> Any:
-    """Safely parse an integer or return original string."""
-    try:
-        return int(v)
-    except ValueError:
-        return v
+def _parse_int_val(v: str) -> int:
+    """Parse an iCalendar integer string to int."""
+    return int(v.strip())
 
 
-def _parse_float_val(v: str) -> Any:
-    """Safely parse a float or return original string."""
-    try:
-        return float(v)
-    except ValueError:
-        return v
+def _parse_float_val(v: str) -> float | list[float]:
+    """Parse an iCalendar float string or semicolon-separated float pair (e.g. GEO)."""
+    v_clean = v.strip()
+    if ";" in v_clean:
+        return [float(part.strip()) for part in v_clean.split(";") if part.strip()]
+    return float(v_clean)
 
 
-def _parse_int_list(v: str) -> Any:
-    """Parse comma-separated integer list."""
-    items: list[Any] = []
-    for item in v.split(","):
-        try:
-            items.append(int(item))
-        except ValueError:
-            items.append(item)
-    return items if len(items) > 1 else items[0]
+def _parse_int_list(v: str) -> list[int] | int:
+    """Parse comma-separated integer list into list[int] or single int."""
+    items = [int(item.strip()) for item in v.split(",") if item.strip()]
+    if len(items) == 1:
+        return items[0]
+    return items
 
 
-def _parse_recur_field(k_lower: str, v: str) -> Any:
+def _parse_recur_field(k_lower: str, v: str) -> str | int | list[int] | list[str]:
     """Parse single recurrence rule part into jCal type."""
     if k_lower in ("freq", "wkst"):
         return v.upper()
@@ -187,14 +185,14 @@ def _parse_recur_field(k_lower: str, v: str) -> Any:
     ):
         return _parse_int_list(v)
     if k_lower == "byday":
-        days = v.split(",")
+        days = [d.strip() for d in v.split(",") if d.strip()]
         return days if len(days) > 1 else days[0]
     return v
 
 
-def _format_recur_to_jcal(val: str) -> dict[str, Any]:
+def _format_recur_to_jcal(val: str) -> JCalRecur:
     """Convert RFC 5545 RRULE string to RFC 7265 JSON recur object."""
-    rule_dict: dict[str, Any] = {}
+    rule_dict: JCalRecur = {}
     for part in val.split(";"):
         if not part or "=" not in part:
             continue
@@ -204,7 +202,7 @@ def _format_recur_to_jcal(val: str) -> dict[str, Any]:
     return rule_dict
 
 
-def _format_recur_subparts(val: dict[str, Any]) -> list[str]:
+def _format_recur_subparts(val: JCalRecur) -> list[str]:
     """Format non-standard recurrence subparts."""
     parts: list[str] = []
     for k, v in val.items():
@@ -219,7 +217,7 @@ def _format_recur_subparts(val: dict[str, Any]) -> list[str]:
     return parts
 
 
-def _format_recur_to_ics(val: dict[str, Any] | str) -> str:
+def _format_recur_to_ics(val: JCalRecur | str) -> str:
     """Convert RFC 7265 recur object back to RFC 5545 RRULE string."""
     if isinstance(val, str):
         return val
@@ -236,7 +234,7 @@ def _format_recur_to_ics(val: dict[str, Any] | str) -> str:
     return ";".join(parts)
 
 
-CONVERTERS_TO_JCAL = {
+CONVERTERS_TO_JCAL: dict[str, Callable[[str], JCalScalar]] = {
     "text": _unescape_text,
     "date-time": _format_iso_datetime,
     "date": _format_iso_datetime,
@@ -249,7 +247,7 @@ CONVERTERS_TO_JCAL = {
 }
 
 
-def _convert_value_to_jcal(val_type: str, raw_val: str) -> Any:
+def _convert_value_to_jcal(val_type: str, raw_val: str) -> JCalScalar:
     """Convert raw property value string to jCal typed value."""
     converter = CONVERTERS_TO_JCAL.get(val_type)
     if converter is not None:
@@ -257,7 +255,7 @@ def _convert_value_to_jcal(val_type: str, raw_val: str) -> Any:
     return raw_val
 
 
-def _convert_value_to_ics(val_type: str, val: Any) -> str:
+def _convert_value_to_ics(val_type: str, val: JCalScalar) -> str:
     """Convert jCal typed value back to iCalendar string."""
     if val_type == "text":
         return _escape_text(str(val))
@@ -265,8 +263,10 @@ def _convert_value_to_ics(val_type: str, val: Any) -> str:
         return _parse_iso_datetime_to_ics(str(val))
     if val_type == "utc-offset":
         return _parse_utc_offset_to_ics(str(val))
-    if val_type == "recur":
+    if val_type == "recur" and isinstance(val, (dict, str)):
         return _format_recur_to_ics(val)
+    if val_type == "float" and isinstance(val, list):
+        return ";".join(str(item) for item in val)
     if val_type == "boolean":
         return "TRUE" if val else "FALSE"
     return str(val)
@@ -286,9 +286,11 @@ def _unfold_lines(text: str) -> list[str]:
     return unfolded
 
 
-def _parse_params(param_str: str) -> tuple[dict[str, Any], str | None]:
+def _parse_params(
+    param_str: str,
+) -> tuple[dict[str, str | list[str]], str | None]:
     """Parse parameter string into lowercase dict and optional VALUE type override."""
-    params: dict[str, Any] = {}
+    params: dict[str, str | list[str]] = {}
     val_type_override: str | None = None
     if not param_str:
         return params, val_type_override

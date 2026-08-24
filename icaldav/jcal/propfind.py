@@ -23,8 +23,8 @@ from icaldav.xml.namespaces import CALDAV, DAV
 _LOGGER = logging.getLogger(__name__)
 
 
-def _parse_tag(item: Any) -> PropertyTag:
-    """Parse a property tag from string or dictionary."""
+def _parse_tag(item: PropertyTag | dict[str, str] | str) -> PropertyTag:
+    """Parse a property tag from PropertyTag, dict, or string."""
     if isinstance(item, PropertyTag):
         return item
     if isinstance(item, dict):

@@ -1,6 +1,11 @@
-"""Unit tests for jCal (RFC 7265) <-> iCalendar (RFC 5545) codec."""
+import pytest
 
-from icaldav.jcal.codec import ics_to_jcal, jcal_to_ics
+from icaldav.jcal.codec import (
+    _parse_float_val,
+    _parse_int_val,
+    ics_to_jcal,
+    jcal_to_ics,
+)
 
 SAMPLE_ICS = (
     "BEGIN:VCALENDAR\r\n"
@@ -140,3 +145,54 @@ def test_text_unescaping_escaping() -> None:
 
     rebuilt = jcal_to_ics(jcal)
     assert "Line 1\\nLine 2\\, with comma\\; and semi\\\\slash" in rebuilt
+
+
+def test_typed_integer_and_float_properties() -> None:
+    """Verify strongly typed integer and float conversions in jCal."""
+    ics = (
+        "BEGIN:VCALENDAR\r\n"
+        "BEGIN:VEVENT\r\n"
+        "UID:typed-vals\r\n"
+        "PRIORITY:1\r\n"
+        "PERCENT-COMPLETE:75\r\n"
+        "GEO:37.386013;-122.082932\r\n"
+        "RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15,31;BYSETPOS=-1\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR"
+    )
+    jcal = ics_to_jcal(ics)
+    vprops = jcal[2][0][1]
+
+    prio_prop = next(p for p in vprops if p[0] == "priority")
+    assert prio_prop == ["priority", {}, "integer", 1]
+    assert isinstance(prio_prop[3], int)
+
+    pct_prop = next(p for p in vprops if p[0] == "percent-complete")
+    assert pct_prop == ["percent-complete", {}, "integer", 75]
+    assert isinstance(pct_prop[3], int)
+
+    geo_prop = next(p for p in vprops if p[0] == "geo")
+    assert geo_prop == ["geo", {}, "float", [37.386013, -122.082932]]
+    assert isinstance(geo_prop[3][0], float)
+    assert isinstance(geo_prop[3][1], float)
+
+    rrule_prop = next(p for p in vprops if p[0] == "rrule")
+    assert rrule_prop[3]["bymonthday"] == [1, 15, 31]
+    assert rrule_prop[3]["bysetpos"] == -1
+
+    # Roundtrip back to ICS
+    rebuilt = jcal_to_ics(jcal)
+    assert "PRIORITY:1" in rebuilt
+    assert "PERCENT-COMPLETE:75" in rebuilt
+    assert "GEO:37.386013;-122.082932" in rebuilt
+    assert "BYMONTHDAY=1,15,31" in rebuilt
+    assert "BYSETPOS=-1" in rebuilt
+
+
+def test_parser_validation_errors() -> None:
+    """Verify strict type parsers raise ValueError on invalid strings."""
+    with pytest.raises(ValueError):
+        _parse_int_val("not_an_int")
+
+    with pytest.raises(ValueError):
+        _parse_float_val("not_a_float")
