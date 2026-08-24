@@ -47,7 +47,7 @@ Progress tracking and task breakdown for decoupling WebDAV handlers from XML ser
   - Remove `KNOWN_LEGACY_XML_HANDLERS` allowlist in `script/check-architecture`, enforcing 0 architecture violations across the entire codebase.
 
 ### Phase 5: Alternative Serializer Readiness (jCal / RFC 7265)
-- [ ] **Validate Serializer Swap**:
+- [x] **Validate Serializer Swap**:
   - Implement prototype jCal encoder (`icaldav/jcal/`) to verify that `CoreWebDavEngine` IR objects render to JSON payloads without engine or handler changes.
 
 ---
@@ -60,4 +60,4 @@ Progress tracking and task breakdown for decoupling WebDAV handlers from XML ser
 | **Phase 2** | Core IR Engine (`icaldav/engine/`) | **0% (Next Up)** |
 | **Phase 3** | Decoders & Encoders Refactoring (`icaldav/xml/`) | **0%** |
 | **Phase 4** | Handler Refactoring & 0 Violations | **0%** |
-| **Phase 5** | Alternative Serializer Readiness (jCal) | **0%** |
+| **Phase 5** | Alternative Serializer Readiness (jCal) | **100% Complete** |
