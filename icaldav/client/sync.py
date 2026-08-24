@@ -150,7 +150,7 @@ class CalDavSyncManager:
         """Execute incremental sync using RFC 6578 WebDAV Collection Synchronization."""
         stored_token = await self.store.get_sync_token(self.collection_path) or ""
         results, server_token = await self.client.sync_collection(
-            self.collection_url, sync_token=stored_token
+            self.collection_url, sync_token=stored_token, auto_paginate=True
         )
 
         local_etags = await self.store.get_etags(self.collection_path)

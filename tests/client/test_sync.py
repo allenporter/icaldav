@@ -81,23 +81,25 @@ async def harness() -> AsyncGenerator[LoopbackHarness]:
     app = create_app(server_store)
     server = TestServer(app)
 
-    async with TestClient(server) as test_http_client:
-        async with CalDavClient(session=test_http_client.session) as client:
-            base_url = str(server.make_url("/work/"))
-            local_store = MemoryStore()
-            sync_manager = CalDavSyncManager(
-                client=client,
-                collection_url=base_url,
-                store=local_store,
-            )
+    async with (
+        TestClient(server) as test_http_client,
+        CalDavClient(session=test_http_client.session) as client,
+    ):
+        base_url = str(server.make_url("/work/"))
+        local_store = MemoryStore()
+        sync_manager = CalDavSyncManager(
+            client=client,
+            collection_url=base_url,
+            store=local_store,
+        )
 
-            yield LoopbackHarness(
-                client=client,
-                server_store=server_store,
-                local_store=local_store,
-                base_url=base_url,
-                sync_manager=sync_manager,
-            )
+        yield LoopbackHarness(
+            client=client,
+            server_store=server_store,
+            local_store=local_store,
+            base_url=base_url,
+            sync_manager=sync_manager,
+        )
 
 
 def test_extract_uid_and_normalize_href() -> None:

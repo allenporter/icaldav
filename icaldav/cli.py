@@ -273,7 +273,7 @@ async def run_auth_async(args: argparse.Namespace) -> int:
                     print(f"    Token URI: {method.oauth_config.token_uri}")
                 else:
                     print(f"  - {method.scheme} (realm: {method.realm or 'N/A'})")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             print(f"Error probing {args.url}: {err}", file=sys.stderr)
             return 1
     elif action == "oauth":
@@ -282,7 +282,7 @@ async def run_auth_async(args: argparse.Namespace) -> int:
         print(f"Probing {args.url} for OAuth endpoints...")
         try:
             methods = await negotiator.probe(args.url)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             print(f"Error probing {args.url}: {err}", file=sys.stderr)
             return 1
 
@@ -324,7 +324,7 @@ async def run_auth_async(args: argparse.Namespace) -> int:
         except TimeoutError:
             print("Error: OAuth callback timed out after 5 minutes.", file=sys.stderr)
             return 1
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             print(f"Error receiving authorization code: {err}", file=sys.stderr)
             return 1
 
@@ -332,7 +332,7 @@ async def run_auth_async(args: argparse.Namespace) -> int:
         print("Exchanging authorization code for tokens...")
         try:
             token = await OAuthSession.exchange_code(config, code, code_verifier)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             print(f"Error exchanging code: {err}", file=sys.stderr)
             return 1
 

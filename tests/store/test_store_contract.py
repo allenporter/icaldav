@@ -163,3 +163,80 @@ async def test_store_get_changes_since_and_tombstones(store: LocalStore) -> None
     changes_3 = await store.get_changes_since(coll, sync_token=token_2)
     assert len(changes_3.changed) == 0
     assert len(changes_3.deleted_hrefs) == 0
+
+
+@pytest.mark.asyncio
+async def test_store_multipage_sync_pagination(store: LocalStore) -> None:
+    """RFC 6578 §3.7: Verify multi-page sync token iteration for initial and delta sync."""
+    coll = CollectionPath.parse("/work")
+    await store.create_collection(coll)
+
+    # 1. Add 4 resources
+    for i in range(1, 5):
+        await store.save_resource(
+            CalendarResource(
+                path=ResourcePath.parse(f"/work/event{i}.ics"),
+                etag=f"etag-{i}",
+                ics_data=f"BEGIN:VCALENDAR\nUID:event-{i}\nEND:VCALENDAR",
+                uid=f"event-{i}",
+            )
+        )
+
+    # 2. Initial sync pagination with limit=2
+    page1 = await store.get_changes_since(coll, sync_token=None, limit=2)
+    assert len(page1.changed) == 2
+    assert page1.deleted_hrefs == []
+    assert page1.has_more is True
+    token_p1 = page1.sync_token
+
+    page2 = await store.get_changes_since(coll, sync_token=token_p1, limit=2)
+    assert len(page2.changed) == 2
+    assert page2.deleted_hrefs == []
+    assert page2.has_more is False
+    token_p2 = page2.sync_token
+
+    # Verify all 4 resources were returned across pages
+    all_hrefs = [r.path.canonical for r in page1.changed + page2.changed]
+    assert all_hrefs == [f"/work/event{i}.ics" for i in range(1, 5)]
+
+    # 3. Delta changes: modify 1, delete 1, add 1 (3 total delta changes)
+    await store.save_resource(
+        CalendarResource(
+            path=ResourcePath.parse("/work/event1.ics"),
+            etag="etag-1-updated",
+            ics_data="BEGIN:VCALENDAR\nUID:event-1\nSUMMARY:Updated\nEND:VCALENDAR",
+            uid="event-1",
+        )
+    )
+    await store.delete_resource(ResourcePath.parse("/work/event2.ics"))
+    await store.save_resource(
+        CalendarResource(
+            path=ResourcePath.parse("/work/event5.ics"),
+            etag="etag-5",
+            ics_data="BEGIN:VCALENDAR\nUID:event-5\nEND:VCALENDAR",
+            uid="event-5",
+        )
+    )
+
+    # 4. Delta sync pagination with limit=2
+    d_page1 = await store.get_changes_since(coll, sync_token=token_p2, limit=2)
+    assert len(d_page1.changed) + len(d_page1.deleted_hrefs) == 2
+    assert d_page1.has_more is True
+    token_dp1 = d_page1.sync_token
+
+    d_page2 = await store.get_changes_since(coll, sync_token=token_dp1, limit=2)
+    assert len(d_page2.changed) + len(d_page2.deleted_hrefs) == 1
+    assert d_page2.has_more is False
+    token_dp2 = d_page2.sync_token
+
+    # Verify delta changes across pages
+    all_d_changed = [r.path.canonical for r in d_page1.changed + d_page2.changed]
+    all_d_deleted = d_page1.deleted_hrefs + d_page2.deleted_hrefs
+    assert set(all_d_changed) == {"/work/event1.ics", "/work/event5.ics"}
+    assert all_d_deleted == ["/work/event2.ics"]
+
+    # 5. Delta sync with final token returns no changes
+    d_page3 = await store.get_changes_since(coll, sync_token=token_dp2, limit=2)
+    assert d_page3.changed == []
+    assert d_page3.deleted_hrefs == []
+    assert d_page3.has_more is False

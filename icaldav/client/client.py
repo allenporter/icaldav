@@ -82,13 +82,16 @@ class CalDavClient:
 
     def _warn_insecure_auth(self, url: str) -> None:
         """Emit a warning if credentials are being sent over non-HTTPS."""
-        if self.auth_profile and not url.startswith("https://"):
-            if self.auth_profile.basic_auth or self.auth_profile.token:
-                warnings.warn(
-                    f"Sending credentials over insecure HTTP connection to {url}. "
-                    "Use HTTPS to protect credentials in transit.",
-                    stacklevel=3,
-                )
+        if (
+            self.auth_profile
+            and not url.startswith("https://")
+            and (self.auth_profile.basic_auth or self.auth_profile.token)
+        ):
+            warnings.warn(
+                f"Sending credentials over insecure HTTP connection to {url}. "
+                "Use HTTPS to protect credentials in transit.",
+                stacklevel=3,
+            )
 
     def _check_response(self, resp: aiohttp.ClientResponse) -> None:
         """Inspect HTTP response status and raise CalDavAuthError on 401/403 with WWW-Authenticate.
@@ -364,39 +367,16 @@ class CalDavClient:
             content = await resp.read()
             return parse_multistatus_xml(content)
 
-    async def sync_collection(
+    async def _sync_collection_page(
         self,
         url: str,
-        sync_token: str = "",
+        sync_token: str | None = "",
         limit: int | None = None,
     ) -> tuple[list[ReportResource], str | None]:
-        """Perform a WebDAV sync-collection REPORT (RFC 6578).
-
-        Fetch updated calendar resources changed since the specified sync token.
-
-        Use Cases for Clients:
-            - **Fast Synchronization**: Allows CalDAV client applications (e.g. mobile/desktop apps)
-              to synchronize only resources that have been added, modified, or deleted since the
-              last sync, drastically reducing bandwidth and latency compared to full collection scans.
-
-        TODO(RFC 6578 §3.7): Multi-page token iteration support.
-        If the server returns a truncated result set with an intermediate sync token,
-        clients must issue follow-up requests in a loop until the final state token is reached.
-
-        RFC Reference:
-            - RFC 6578 Section 3 & 3.7: WebDAV Sync Protocol & DAV:limit.
-
-        Args:
-            url: Target calendar collection URI path.
-            sync_token: Prior sync token string, or empty string for initial sync.
-            limit: Optional result limit integer for paginated sync queries.
-
-        Returns:
-            Tuple of (list of ReportResource items for updated resources, server sync_token string or None).
-        """
+        """Fetch a single page of sync-collection REPORT results."""
         session = await self._get_session()
         self._warn_insecure_auth(url)
-        body = build_sync_collection_xml(sync_token=sync_token, limit=limit)
+        body = build_sync_collection_xml(sync_token=sync_token or "", limit=limit)
         headers = {
             "Content-Type": "application/xml; charset=utf-8",
             "Depth": "1",
@@ -406,3 +386,55 @@ class CalDavClient:
             self._check_response(resp)
             content = await resp.read()
             return parse_sync_collection_response(content)
+
+    async def sync_collection(
+        self,
+        url: str,
+        sync_token: str | None = "",
+        limit: int | None = None,
+        auto_paginate: bool = False,
+    ) -> tuple[list[ReportResource], str | None]:
+        """Perform a WebDAV sync-collection REPORT (RFC 6578).
+
+        Fetch updated calendar resources changed since the specified sync token.
+
+        Use Cases for Clients:
+            - **Fast Synchronization**: Allows CalDAV client applications (e.g. mobile/desktop apps)
+              to synchronize only resources that have been added, modified, or deleted since the
+              last sync, drastically reducing bandwidth and latency compared to full collection scans.
+            - **Multi-page Auto-pagination**: When auto_paginate is True, iteratively requests
+              intermediate sync token pages until all pages are retrieved and the final sync token
+              is reached (RFC 6578 §3.7).
+
+        RFC Reference:
+            - RFC 6578 Section 3 & 3.7: WebDAV Sync Protocol & DAV:limit.
+
+        Args:
+            url: Target calendar collection URI path.
+            sync_token: Prior sync token string, or empty string for initial sync.
+            limit: Optional result limit integer for paginated sync queries.
+            auto_paginate: If True, automatically iterate through intermediate sync tokens.
+
+        Returns:
+            Tuple of (list of ReportResource items for updated resources, server sync_token string or None).
+        """
+        if not auto_paginate:
+            return await self._sync_collection_page(url, sync_token, limit)
+
+        all_resources: list[ReportResource] = []
+        current_token: str = sync_token or ""
+        seen_tokens: set[str] = set()
+
+        while True:
+            page_resources, next_token = await self._sync_collection_page(
+                url, current_token, limit
+            )
+            all_resources.extend(page_resources)
+
+            if next_token is None:
+                return all_resources, current_token
+            if next_token == current_token or next_token in seen_tokens:
+                return all_resources, next_token
+
+            seen_tokens.add(current_token)
+            current_token = next_token

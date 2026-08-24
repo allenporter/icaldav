@@ -109,10 +109,12 @@ class OAuthSession:
             "client_id": config.client_id,
             "client_secret": config.client_secret,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(config.token_uri, data=payload) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(config.token_uri, data=payload) as resp,
+        ):
+            resp.raise_for_status()
+            data = await resp.json()
 
         expires_at: float | None = None
         if "expires_in" in data:
@@ -142,10 +144,12 @@ class OAuthSession:
             "client_id": config.client_id,
             "client_secret": config.client_secret,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(config.token_uri, data=payload) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(config.token_uri, data=payload) as resp,
+        ):
+            resp.raise_for_status()
+            data = await resp.json()
 
         expires_at: float | None = None
         if "expires_in" in data:

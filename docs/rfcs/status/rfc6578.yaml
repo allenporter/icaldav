@@ -38,9 +38,9 @@ sections:
 
       - id: "REQ-6578-3.7-2"
         summary: "Must support multi-page token pagination and return intermediate sync tokens when results are truncated."
-        status: "not_implemented"
-        maturity: "not_implemented"
-        details: "Server currently truncates result array but does not emit intermediate page tokens for multi-page iteration."
+        status: "implemented"
+        maturity: "production_grade"
+        details: "Server emits intermediate sync tokens on limit truncation with has_more flag in SyncChanges and ReportMultiStatus; SQLiteStore and MemoryStore support sequential iteration; CalDavClient supports auto-pagination; verified by store contract and compliance test suites."
 
   - id: "6.1"
     title: "DAV:sync-token Property"

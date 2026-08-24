@@ -49,22 +49,24 @@ async def test_report_principal_property_search() -> None:
     store = MemoryStore()
     app = create_app(store, principal_store=p_store)
 
-    async with TestClient(TestServer(app)) as test_client:
-        async with CalDavClient(session=test_client.session) as caldav_client:
-            # Search matching 'alice'
-            results_alice = await caldav_client.principal_property_search(
-                url=str(test_client.make_url("/")),
-                match="alice",
-            )
-            assert len(results_alice) == 1
-            assert results_alice[0].href == "/principals/alice/"
+    async with (
+        TestClient(TestServer(app)) as test_client,
+        CalDavClient(session=test_client.session) as caldav_client,
+    ):
+        # Search matching 'alice'
+        results_alice = await caldav_client.principal_property_search(
+            url=str(test_client.make_url("/")),
+            match="alice",
+        )
+        assert len(results_alice) == 1
+        assert results_alice[0].href == "/principals/alice/"
 
-            # Search matching non-existent user
-            results_none = await caldav_client.principal_property_search(
-                url=str(test_client.make_url("/")),
-                match="nonexistent",
-            )
-            assert len(results_none) == 0
+        # Search matching non-existent user
+        results_none = await caldav_client.principal_property_search(
+            url=str(test_client.make_url("/")),
+            match="nonexistent",
+        )
+        assert len(results_none) == 0
 
 
 @pytest.mark.asyncio
@@ -72,10 +74,12 @@ async def test_report_sync_collection() -> None:
     """Test sync-collection REPORT dispatching using CalDavClient."""
     store = MemoryStore()
     app = create_app(store)
-    async with TestClient(TestServer(app)) as test_client:
-        async with CalDavClient(session=test_client.session) as caldav_client:
-            resources, _ = await caldav_client.sync_collection(
-                url=str(test_client.make_url("/work/")),
-                sync_token="http://icaldav.org/ns/sync-tokens/1",
-            )
-            assert isinstance(resources, list)
+    async with (
+        TestClient(TestServer(app)) as test_client,
+        CalDavClient(session=test_client.session) as caldav_client,
+    ):
+        resources, _ = await caldav_client.sync_collection(
+            url=str(test_client.make_url("/work/")),
+            sync_token="http://icaldav.org/ns/sync-tokens/1",
+        )
+        assert isinstance(resources, list)
