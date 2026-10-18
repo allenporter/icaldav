@@ -149,3 +149,17 @@ def parse_sync_collection_response(
             break
 
     return resources, sync_token
+
+
+def is_valid_sync_token_error(xml_bytes: bytes) -> bool:
+    """Return True if xml_bytes is a <DAV:error> containing <DAV:valid-sync-token/> (RFC 6578 §3.2)."""
+    if not xml_bytes or not xml_bytes.strip():
+        return False
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return False
+    return (
+        root.tag == qname(DAV, "error")
+        and root.find(qname(DAV, "valid-sync-token")) is not None
+    )
