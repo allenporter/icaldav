@@ -116,7 +116,8 @@ class ReportHandler:
     ) -> web.Response:
         """Resolve specific resource hrefs for a calendar-multiget REPORT."""
         query = parse_calendar_multiget(body_bytes)
-        result = await self.engine.evaluate_calendar_multiget(self.store, query)
+        coll = CollectionPath.parse(f"/{collection_id}") if collection_id else None
+        result = await self.engine.evaluate_calendar_multiget(self.store, query, coll)
         xml_bytes = build_report_response(result)
         return web.Response(
             status=207,
