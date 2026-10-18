@@ -19,6 +19,15 @@ RFC References:
 """
 
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+
+from ical.calendar import Calendar
+from ical.calendar_stream import IcsCalendarStream
+from ical.exceptions import CalendarError
+from ical.timeline import generic_timeline
+
+_MIN_DT = datetime(1, 1, 1, tzinfo=UTC)
+_MAX_DT = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
 
 
 @dataclass
@@ -99,94 +108,42 @@ class CompFilter:
     """
 
 
-def extract_component_types(ics_data: str) -> list[str]:
-    """Extract all top-level component type names (VEVENT, VTODO, etc.) from raw iCalendar data.
-
-    Does NOT parse VCALENDAR itself, only inner components.
-
-    Args:
-        ics_data: Raw iCalendar string content.
-
-    Returns:
-        List of component type strings like ['VEVENT'] or ['VTODO'].
-    """
-    types = []
-    lines = ics_data.splitlines()
-    in_vcalendar = False
-    for line in lines:
-        line_upper = line.strip().upper()
-        if line_upper == "BEGIN:VCALENDAR":
-            in_vcalendar = True
-            continue
-        if line_upper == "END:VCALENDAR":
-            break
-        if in_vcalendar and line_upper.startswith("BEGIN:"):
-            comp_type = line_upper[6:]
-            types.append(comp_type)
-    return types
+def _parse_filter_dt(value: str | None) -> datetime | None:
+    """Parse an iCalendar DATE or DATE-TIME string into a UTC datetime."""
+    if not value or not (s := value.strip()):
+        return None
+    if "T" in s.upper():
+        dt = datetime.fromisoformat(s)
+        return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+    d = date.fromisoformat(s)
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
-def extract_time_range(ics_data: str) -> tuple[str | None, str | None]:
-    """Extract DTSTART and DTEND values from raw iCalendar data.
-
-    Args:
-        ics_data: Raw iCalendar string content.
-
-    Returns:
-        Tuple of (dtstart, dtend) as strings, or None for missing values.
-    """
-    dtstart = None
-    dtend = None
-    lines = ics_data.splitlines()
-    for line in lines:
-        line_upper = line.strip().upper()
-        if line_upper.startswith(("DTSTART:", "DTSTART;")):
-            parts = line.split(":", 1)
-            if len(parts) > 1:
-                dtstart = parts[1].strip()
-        elif line_upper.startswith(("DTEND:", "DTEND;")):
-            parts = line.split(":", 1)
-            if len(parts) > 1:
-                dtend = parts[1].strip()
-
-    return dtstart, dtend
-
-
-def time_ranges_overlap(
-    event_start: str | None,
-    event_end: str | None,
-    filter_start: str | None,
-    filter_end: str | None,
-) -> bool:
-    """Check if an event's time range overlaps a filter's time range.
-
-    Uses the half-open interval [start, end) overlap condition from RFC 4791 §9.9:
-    (filter_start < component_end) AND (filter_end > component_start)
-
-    Args:
-        event_start: Event start time string (or None).
-        event_end: Event end time string (or None).
-        filter_start: Filter start time string (or None).
-        filter_end: Filter end time string (or None).
-
-    Returns:
-        True if there is temporal overlap, False otherwise.
-    """
-    if event_start is None:
-        return False
-
-    if event_end is None:
-        event_end = event_start
-
-    cond1 = True
-    if filter_start is not None:
-        cond1 = filter_start < event_end
-
-    cond2 = True
-    if filter_end is not None:
-        cond2 = filter_end > event_start
-
-    return cond1 and cond2
+def _matches_sub_filter(calendar: Calendar, sub_filter: CompFilter) -> bool:
+    """Evaluate a single child CompFilter against a parsed ical.Calendar."""
+    comp_name = sub_filter.name.upper()
+    if comp_name == "VEVENT":
+        if not calendar.events:
+            return False
+        if sub_filter.time_range is None:
+            return True
+        start_dt = _parse_filter_dt(sub_filter.time_range.start) or _MIN_DT
+        end_dt = _parse_filter_dt(sub_filter.time_range.end) or _MAX_DT
+        return any(calendar.timeline_tz(UTC).overlapping(start_dt, end_dt))
+    if comp_name == "VTODO":
+        if not calendar.todos:
+            return False
+        if sub_filter.time_range is None:
+            return True
+        start_dt = _parse_filter_dt(sub_filter.time_range.start) or _MIN_DT
+        end_dt = _parse_filter_dt(sub_filter.time_range.end) or _MAX_DT
+        dated_todos = [t for t in calendar.todos if t.dtstart is not None]
+        if any(t.dtstart is None for t in calendar.todos):
+            return True
+        return bool(dated_todos) and any(
+            generic_timeline(dated_todos, UTC).overlapping(start_dt, end_dt)
+        )
+    return False
 
 
 def matches_comp_filter(ics_data: str, comp_filter: CompFilter) -> bool:
@@ -199,34 +156,14 @@ def matches_comp_filter(ics_data: str, comp_filter: CompFilter) -> bool:
     Returns:
         True if the data matches the filter tree, False otherwise.
     """
-    if comp_filter.name.upper() == "VCALENDAR":
-        if not comp_filter.comp_filters:
-            return True
+    if comp_filter.name.upper() != "VCALENDAR":
+        return False
 
-        comp_types = extract_component_types(ics_data)
-
-        for sub_filter in comp_filter.comp_filters:
-            matched_sub = False
-
-            for ctype in comp_types:
-                if ctype.upper() == sub_filter.name.upper():
-                    if sub_filter.time_range:
-                        ev_start, ev_end = extract_time_range(ics_data)
-                        if time_ranges_overlap(
-                            ev_start,
-                            ev_end,
-                            sub_filter.time_range.start,
-                            sub_filter.time_range.end,
-                        ):
-                            matched_sub = True
-                            break
-                    else:
-                        matched_sub = True
-                        break
-
-            if not matched_sub:
-                return False
-
-        return True
-
-    return False
+    try:
+        calendar = IcsCalendarStream.calendar_from_ics(ics_data)
+        return all(
+            _matches_sub_filter(calendar, sub_filter)
+            for sub_filter in comp_filter.comp_filters
+        )
+    except (CalendarError, ValueError):
+        return False
