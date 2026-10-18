@@ -176,16 +176,16 @@ class MemoryStore(LocalStore):
         ]
         changed_paths = {res.path.canonical for res, _ in changed_res}
         tomb_list = self._tombstones.get(coll, [])
-        deleted_items = [
-            (p_str, t_num)
+        deleted_items = {
+            p_str: t_num
             for p_str, t_num in tomb_list
             if t_num > token_num and p_str not in changed_paths
-        ]
+        }
 
         all_changes: list[tuple[str, CalendarResource | str, int]] = []
         for res, t_id in changed_res:
             all_changes.append(("changed", res, t_id))
-        for p_str, t_id in deleted_items:
+        for p_str, t_id in deleted_items.items():
             all_changes.append(("deleted", p_str, t_id))
 
         all_changes.sort(key=lambda x: x[2])

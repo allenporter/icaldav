@@ -361,3 +361,35 @@ async def test_store_custom_properties(store: LocalStore) -> None:
     await store.set_properties(coll, {}, remove_props=[tag2])
     props2 = await store.get_properties(coll)
     assert props2 == {tag1: "My Calendar"}
+
+
+@pytest.mark.asyncio
+async def test_store_tombstone_deduplication_and_recreation(store: LocalStore) -> None:
+    """Verify recreating and re-deleting a resource does not duplicate tombstones."""
+    coll = CollectionPath.parse("/work")
+    await store.create_collection(coll)
+
+    res_path = ResourcePath.parse("/work/event1.ics")
+    res_v1 = CalendarResource(
+        path=res_path,
+        etag="etag-v1",
+        ics_data=SAMPLE_ICS_1,
+        uid="event-1",
+    )
+
+    await store.save_resource(res_v1)
+    token_1 = (await store.get_changes_since(coll, sync_token=None)).sync_token
+    assert await store.delete_resource(res_path) is True
+
+    res_v2 = CalendarResource(
+        path=res_path,
+        etag="etag-v2",
+        ics_data=SAMPLE_ICS_2,
+        uid="event-1",
+    )
+    await store.save_resource(res_v2)
+    assert await store.delete_resource(res_path) is True
+
+    changes = await store.get_changes_since(coll, sync_token=token_1)
+    assert changes.changed == []
+    assert changes.deleted_hrefs == ["/work/event1.ics"]

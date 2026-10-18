@@ -63,6 +63,7 @@ class SQLiteStore(LocalStore):
                 schema_sql = _load_schema()
                 self._conn.executescript(schema_sql)
                 self._initialized = True
+            self._conn.autocommit = False
         return self._conn
 
     async def close(self) -> None:
@@ -72,10 +73,22 @@ class SQLiteStore(LocalStore):
                 self._conn.close()
                 self._conn = None
 
+    def _run_sync(self, fn: Any, *args: Any) -> Any:
+        conn = self._get_connection()
+        try:
+            result = fn(*args)
+            if conn.in_transaction:
+                conn.commit()
+            return result
+        except Exception:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
     async def _execute_sync(self, fn: Any, *args: Any) -> Any:
         """Run a synchronous database function in a thread with lock protection."""
         async with self._lock:
-            return await asyncio.to_thread(fn, *args)
+            return await asyncio.to_thread(self._run_sync, fn, *args)
 
     def _sync_get_sync_token(self, coll_str: str) -> str | None:
         conn = self._get_connection()
@@ -353,8 +366,9 @@ class SQLiteStore(LocalStore):
 
         tomb_rows = conn.execute(
             """
-            SELECT path, token_id FROM tombstones
+            SELECT path, MAX(token_id) AS token_id FROM tombstones
             WHERE collection_path = ? AND token_id > ?
+            GROUP BY path
             ORDER BY token_id ASC
             """,
             (coll_str, token_num),

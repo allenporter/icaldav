@@ -1,5 +1,6 @@
 """Unit and integration tests for SQLiteStore persistence and delta sync."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -157,3 +158,36 @@ async def test_sqlite_store_persistence(tmp_path: Path) -> None:
     assert res.etag == "etag-persisted"
     assert res.ics_data == SAMPLE_ICS_1
     await store2.close()
+
+
+@pytest.mark.asyncio
+async def test_sqlite_store_transaction_rollback_on_failure() -> None:
+    """Test that mid-operation failures roll back sync_token_counter."""
+    store = SQLiteStore(":memory:")
+    coll = CollectionPath.parse("/work")
+    await store.create_collection(coll)
+    res_path = ResourcePath.parse("/work/event1.ics")
+
+    conn = store._get_connection()
+    conn.execute(
+        """
+        CREATE TRIGGER fail_resource_insert
+        BEFORE INSERT ON resources
+        BEGIN
+            SELECT RAISE(ABORT, 'simulated save failure');
+        END;
+        """
+    )
+
+    valid_res = CalendarResource(
+        path=res_path,
+        etag="etag-1",
+        ics_data=SAMPLE_ICS_1,
+        uid="123",
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="simulated save failure"):
+        await store.save_resource(valid_res)
+
+    assert await store.get_sync_token(coll) == "data:,0"
+    assert await store.get_resource(res_path) is None
+    await store.close()
