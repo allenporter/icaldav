@@ -4,6 +4,7 @@ from icaldav.store.types import ReportResource
 from icaldav.xml.report.response import (
     build_report_response,
     parse_report_response,
+    parse_sync_collection_response,
 )
 
 
@@ -82,3 +83,27 @@ def test_parse_report_response_multi_propstat() -> None:
     assert parsed[0].etag == "etag-abc"
     assert parsed[0].ics_data is not None
     assert "UID:abc" in parsed[0].ics_data
+    assert parsed[0].deleted is False
+
+    sync_parsed, token = parse_sync_collection_response(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+        <d:multistatus xmlns:d="DAV:">
+            <d:response>
+                <d:href>/work/deleted_rfc6578.ics</d:href>
+                <d:status>HTTP/1.1 404 Not Found</d:status>
+            </d:response>
+            <d:response>
+                <d:href>/work/deleted_propstat.ics</d:href>
+                <d:propstat>
+                    <d:status>HTTP/1.1 404 Not Found</d:status>
+                </d:propstat>
+            </d:response>
+            <d:sync-token>http://example.com/ns/sync/42</d:sync-token>
+        </d:multistatus>
+        """
+    )
+    assert token == "http://example.com/ns/sync/42"
+    assert [(r.href, r.deleted) for r in sync_parsed] == [
+        ("/work/deleted_rfc6578.ics", True),
+        ("/work/deleted_propstat.ics", True),
+    ]

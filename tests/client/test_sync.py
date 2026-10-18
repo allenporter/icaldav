@@ -151,6 +151,27 @@ async def test_path1_incremental_sync(harness: LoopbackHarness) -> None:
 
 
 @pytest.mark.asyncio
+async def test_path1_incremental_deletion(harness: LoopbackHarness) -> None:
+    """Real Path 1 (RFC 6578 sync-collection) detection and removal of remote deletions."""
+    await harness.client.put_resource(f"{harness.base_url}event1.ics", SAMPLE_ICS_1)
+    await harness.client.put_resource(f"{harness.base_url}event2.ics", SAMPLE_ICS_2)
+
+    res1 = await harness.sync_manager.sync()
+    assert res1.path_used == SyncPath.RFC_6578
+    assert res1.added == 2
+    assert len(await harness.local_store.get_resources("/work")) == 2
+
+    await harness.client.delete_resource(f"{harness.base_url}event1.ics")
+
+    res2 = await harness.sync_manager.sync()
+    assert res2.path_used == SyncPath.RFC_6578
+    assert res2.deleted == 1
+    assert res2.unmodified == 1
+    assert await harness.local_store.get_resource("/work/event1.ics") is None
+    assert await harness.local_store.get_resource("/work/event2.ics") is not None
+
+
+@pytest.mark.asyncio
 async def test_path2_etag_diff_fallback(harness: LoopbackHarness) -> None:
     """Real Path 2 (ETag diffing via PROPFIND Depth 1 + calendar-multiget) synchronization."""
     await harness.client.put_resource(f"{harness.base_url}event1.ics", SAMPLE_ICS_1)
