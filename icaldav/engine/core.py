@@ -359,12 +359,14 @@ class CoreWebDavEngine:
         self,
         store: LocalStore,
         query: CalendarMultigetQuery,
+        collection: CollectionPath | None = None,
     ) -> ReportMultiStatus:
         """Resolve specific resource paths for calendar-multiget.
 
         Args:
             store: LocalStore database instance.
             query: CalendarMultigetQuery IR representation of the request.
+            collection: Optional target CollectionPath to scope requested hrefs.
 
         Returns:
             ReportMultiStatus containing resolved resources.
@@ -376,7 +378,15 @@ class CoreWebDavEngine:
         found = []
         missing = []
         for href in query.hrefs:
-            resource = await store.get_resource(ResourcePath.parse(href))
+            try:
+                res_path = ResourcePath.parse(href)
+            except ValueError:
+                missing.append(href)
+                continue
+            if collection is not None and res_path.collection_path != collection:
+                missing.append(href)
+                continue
+            resource = await store.get_resource(res_path)
             if resource:
                 found.append(
                     ReportResource(
