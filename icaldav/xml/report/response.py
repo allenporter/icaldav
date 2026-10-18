@@ -101,12 +101,18 @@ def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
             if tag == "href" and child.text:
                 href = child.text.strip()
             elif tag == "propstat":
+                ps_ok = False
+                ps_prop: ET.Element | None = None
                 for ps_child in child:
                     ps_tag = strip_ns(ps_child.tag)
                     if ps_tag == "status" and ps_child.text:
-                        is_ok = "200" in ps_child.text
+                        ps_ok = "200" in ps_child.text
                     elif ps_tag == "prop":
-                        for prop_child in ps_child:
+                        ps_prop = ps_child
+                if ps_ok:
+                    is_ok = True
+                    if ps_prop is not None:
+                        for prop_child in ps_prop:
                             prop_tag = strip_ns(prop_child.tag)
                             if prop_tag == "getetag" and prop_child.text:
                                 etag = prop_child.text.strip().strip('"')

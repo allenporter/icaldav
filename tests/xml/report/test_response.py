@@ -52,3 +52,33 @@ def test_parse_report_response_edge_cases() -> None:
     </d:multistatus>
     """
     assert parse_report_response(non_200_xml) == []
+
+
+def test_parse_report_response_multi_propstat() -> None:
+    """Test that a trailing 404 propstat does not clobber a valid 200 propstat."""
+    multi_propstat_xml = b"""<?xml version="1.0" encoding="utf-8"?>
+    <d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+        <d:response>
+            <d:href>/work/event1.ics</d:href>
+            <d:propstat>
+                <d:prop>
+                    <d:getetag>"etag-abc"</d:getetag>
+                    <c:calendar-data>BEGIN:VCALENDAR\r\nUID:abc\r\nEND:VCALENDAR</c:calendar-data>
+                </d:prop>
+                <d:status>HTTP/1.1 200 OK</d:status>
+            </d:propstat>
+            <d:propstat>
+                <d:prop>
+                    <d:Schedule-Tag/>
+                </d:prop>
+                <d:status>HTTP/1.1 404 Not Found</d:status>
+            </d:propstat>
+        </d:response>
+    </d:multistatus>
+    """
+    parsed = parse_report_response(multi_propstat_xml)
+    assert len(parsed) == 1
+    assert parsed[0].href == "/work/event1.ics"
+    assert parsed[0].etag == "etag-abc"
+    assert parsed[0].ics_data is not None
+    assert "UID:abc" in parsed[0].ics_data
