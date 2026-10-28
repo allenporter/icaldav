@@ -133,8 +133,12 @@ async def test_rfc6578_multipage_sync_pagination(harness: ComplianceHarness) -> 
     res_delta, token_delta = await harness.client.sync_collection(
         cal_url, sync_token=token_auto, limit=1, auto_paginate=True
     )
-    delta_hrefs = [r.href for r in res_delta]
-    assert "/multipage-sync/event1.ics" in delta_hrefs
-    assert "/multipage-sync/event6.ics" in delta_hrefs
+    delta_by_href = {r.href: r for r in res_delta}
+    assert "/multipage-sync/event1.ics" in delta_by_href
+    assert delta_by_href["/multipage-sync/event1.ics"].deleted is False
+    assert "/multipage-sync/event2.ics" in delta_by_href
+    assert delta_by_href["/multipage-sync/event2.ics"].deleted is True
+    assert "/multipage-sync/event6.ics" in delta_by_href
+    assert delta_by_href["/multipage-sync/event6.ics"].deleted is False
     assert token_delta is not None
     assert token_delta != token_auto
