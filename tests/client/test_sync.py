@@ -11,10 +11,14 @@ RFC References:
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
+import aiohttp
 import pytest
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.typedefs import Handler
 
 from icaldav.client.client import CalDavClient
+from icaldav.client.exceptions import CalDavAuthError
 from icaldav.client.sync import (
     CalDavSyncManager,
     SyncPath,
@@ -263,3 +267,85 @@ async def test_recurrence_exceptions_and_multi_vevent_parse(
     summaries = [e.summary for e in cal.events]
     assert "Weekly Meeting" in summaries
     assert "Weekly Meeting (Rescheduled)" in summaries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (400, b"Bad Request"),
+        (501, b"Not Implemented"),
+        (
+            403,
+            b'<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>',
+        ),
+    ],
+)
+async def test_sync_fallback_on_sync_collection_error(status: int, body: bytes) -> None:
+    """Verify sync() falls back to ETag diff when sync-collection fails with HTTP error or valid-sync-token rejection."""
+    server_store = MemoryStore()
+    await server_store.create_collection("/work")
+
+    @web.middleware
+    async def reject_sync_collection(
+        request: web.Request,
+        handler: Handler,
+    ) -> web.StreamResponse:
+        if request.method == "REPORT" and b"sync-collection" in await request.read():
+            return web.Response(status=status, body=body)
+        return await handler(request)
+
+    app = create_app(server_store)
+    app.middlewares.append(reject_sync_collection)
+
+    async with (
+        TestClient(TestServer(app)) as test_client,
+        CalDavClient(session=test_client.session) as client,
+    ):
+        base_url = str(test_client.make_url("/work/"))
+        await client.put_resource(f"{base_url}event1.ics", SAMPLE_ICS_1)
+
+        local_store = MemoryStore()
+        await local_store.set_sync_token("/work", "http://example.com/sync/stale")
+        sync_manager = CalDavSyncManager(client, base_url, local_store)
+
+        result = await sync_manager.sync()
+        assert result.path_used == SyncPath.ETAG_DIFF
+        assert result.added == 1
+        assert await local_store.get_sync_token("/work") == "etag-sync-token-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "exc_type"),
+    [
+        (401, CalDavAuthError),
+        (403, CalDavAuthError),
+        (500, aiohttp.ClientResponseError),
+    ],
+)
+async def test_sync_propagates_auth_and_server_errors(
+    status: int, exc_type: type[Exception]
+) -> None:
+    """Verify genuine 401/403 auth errors and 500 server outages propagate without wiping sync_token."""
+
+    async def reject_request(_request: web.Request) -> web.Response:
+        return web.Response(status=status, text="Error")
+
+    app = web.Application()
+    app.router.add_route("REPORT", "/work", reject_request)
+
+    async with (
+        TestClient(TestServer(app)) as test_client,
+        CalDavClient(session=test_client.session) as client,
+    ):
+        local_store = MemoryStore()
+        await local_store.set_sync_token("/work", "http://example.com/sync/valid")
+        sync_manager = CalDavSyncManager(
+            client, str(test_client.make_url("/work/")), local_store
+        )
+        with pytest.raises(exc_type):
+            await sync_manager.sync()
+        assert (
+            await local_store.get_sync_token("/work") == "http://example.com/sync/valid"
+        )
