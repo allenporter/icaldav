@@ -161,24 +161,25 @@ class CalDavSyncManager:
         added = 0
         updated = 0
         deleted = 0
-        unmodified = 0
 
-        # Process sync-collection response items: separate items with inline ics_data
-        # from items that only returned ETags (which require calendar-multiget fetch).
+        # Process sync-collection response items: deduplicate across pages so the
+        # latest state per href wins, then separate inline ics_data, deletions, and ETag-only items.
         items_to_save: list[ReportResource] = []
+        items_to_delete: list[ReportResource] = []
         hrefs_needing_content: list[str] = []
 
-        for item in results:
-            if item.ics_data:
+        for item in {r.normalized_href: r for r in results}.values():
+            if item.resource_path.collection_path != self.collection_path:
+                continue
+            if item.deleted:
+                items_to_delete.append(item)
+            elif item.ics_data:
                 items_to_save.append(item)
-            else:
-                if (
-                    item.normalized_href not in local_etags_norm
-                    or local_etags_norm[item.normalized_href] != item.normalized_etag
-                ):
-                    hrefs_needing_content.append(item.normalized_href)
-                else:
-                    unmodified += 1
+            elif (
+                item.normalized_href not in local_etags_norm
+                or local_etags_norm[item.normalized_href] != item.normalized_etag
+            ):
+                hrefs_needing_content.append(item.normalized_href)
 
         if hrefs_needing_content:
             multiget_results = await self.client.calendar_multiget(
@@ -189,6 +190,10 @@ class CalDavSyncManager:
                     items_to_save.append(item)
 
         # TODO: Support batch store operations (save_resources / delete_resources) in LocalStore
+        for item in items_to_delete:
+            if await self.store.delete_resource(item.resource_path):
+                deleted += 1
+
         for item in items_to_save:
             resource = CalendarResource(
                 path=item.resource_path,

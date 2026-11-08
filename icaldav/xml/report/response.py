@@ -30,11 +30,13 @@ def build_report_response(
     """
     if isinstance(resources, ReportMultiStatus):
         res_list = resources.responses
-        missing_list = list(resources.missing_hrefs) + list(resources.deleted_hrefs)
+        missing_list = list(resources.missing_hrefs)
+        deleted_list = list(resources.deleted_hrefs)
         sync_token = resources.sync_token
     else:
         res_list = resources
         missing_list = missing_hrefs or []
+        deleted_list = []
         sync_token = None
 
     root = ET.Element(qname(DAV, "multistatus"))
@@ -67,6 +69,14 @@ def build_report_response(
         status = ET.SubElement(propstat, qname(DAV, "status"))
         status.text = "HTTP/1.1 404 Not Found"
 
+    for href in deleted_list:
+        resp = ET.SubElement(root, qname(DAV, "response"))
+        href_elem = ET.SubElement(resp, qname(DAV, "href"))
+        href_elem.text = href
+
+        status = ET.SubElement(resp, qname(DAV, "status"))
+        status.text = "HTTP/1.1 404 Not Found"
+
     if sync_token is not None:
         st_elem = ET.SubElement(root, qname(DAV, "sync-token"))
         st_elem.text = sync_token
@@ -74,32 +84,42 @@ def build_report_response(
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
-    """Parse a 207 Multi-Status XML response from a REPORT request."""
+def _parse_multistatus_response(
+    xml_bytes: bytes, *, include_deleted: bool = False
+) -> tuple[list[ReportResource], str | None]:
+    """Parse a 207 Multi-Status XML response from a REPORT request in a single pass."""
     if not xml_bytes or not xml_bytes.strip():
-        return []
+        return [], None
 
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError:
         _LOGGER.debug("Failed to parse REPORT response XML", exc_info=True)
-        return []
+        return [], None
 
     resources: list[ReportResource] = []
+    sync_token: str | None = None
 
     for resp_elem in root:
-        if strip_ns(resp_elem.tag) != "response":
+        elem_tag = strip_ns(resp_elem.tag)
+        if elem_tag == "sync-token" and resp_elem.text:
+            sync_token = resp_elem.text.strip()
+            continue
+        if elem_tag != "response":
             continue
 
         href = ""
         etag = ""
         ics_data: str | None = None
         is_ok = False
+        has_404 = False
 
         for child in resp_elem:
             tag = strip_ns(child.tag)
             if tag == "href" and child.text:
                 href = child.text.strip()
+            elif tag == "status" and child.text and "404" in child.text:
+                has_404 = True
             elif tag == "propstat":
                 ps_ok = False
                 ps_prop: ET.Element | None = None
@@ -107,6 +127,8 @@ def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
                     ps_tag = strip_ns(ps_child.tag)
                     if ps_tag == "status" and ps_child.text:
                         ps_ok = "200" in ps_child.text
+                        if "404" in ps_child.text:
+                            has_404 = True
                     elif ps_tag == "prop":
                         ps_prop = ps_child
                 if ps_ok:
@@ -121,7 +143,19 @@ def parse_report_response(xml_bytes: bytes) -> list[ReportResource]:
 
         if href and is_ok:
             resources.append(ReportResource(href=href, etag=etag, ics_data=ics_data))
+        elif include_deleted and href and has_404:
+            resources.append(ReportResource(href=href, etag="", deleted=True))
 
+    return resources, sync_token
+
+
+def parse_report_response(
+    xml_bytes: bytes, *, include_deleted: bool = False
+) -> list[ReportResource]:
+    """Parse a 207 Multi-Status XML response from a REPORT request."""
+    resources, _ = _parse_multistatus_response(
+        xml_bytes, include_deleted=include_deleted
+    )
     return resources
 
 
@@ -133,19 +167,4 @@ def parse_sync_collection_response(
     Returns:
         Tuple of (resources list, server sync token if present).
     """
-    resources = parse_report_response(xml_bytes)
-    if not xml_bytes or not xml_bytes.strip():
-        return resources, None
-
-    try:
-        root = ET.fromstring(xml_bytes)
-    except ET.ParseError:
-        return resources, None
-
-    sync_token: str | None = None
-    for child in root:
-        if strip_ns(child.tag) == "sync-token" and child.text:
-            sync_token = child.text.strip()
-            break
-
-    return resources, sync_token
+    return _parse_multistatus_response(xml_bytes, include_deleted=True)
