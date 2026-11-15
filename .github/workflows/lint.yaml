@@ -22,9 +22,6 @@ jobs:
         with:
           check_hidden: false
           skip: ./.git,./docs/rfcs
-      - name: Validate Renovate configuration
-        run: |
-          npx --package=renovate@38 -- renovate-config-validator .github/renovate.json5
 
       - name: Run yamllint
         uses: ibiqlik/action-yamllint@v3

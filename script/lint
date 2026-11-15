@@ -9,11 +9,14 @@ echo "==> Running linters..."
 
 if command -v uv >/dev/null 2>&1; then
   uv run pre-commit run --all-files
+  echo ""
+  uv run --no-project ./script/check-architecture
+  echo ""
+  uv run --no-project ./script/check-rfc-coverage
 else
   pre-commit run --all-files
+  echo ""
+  ./script/check-architecture
+  echo ""
+  ./script/check-rfc-coverage
 fi
-
-echo ""
-./script/check-architecture
-echo ""
-./script/check-rfc-coverage
