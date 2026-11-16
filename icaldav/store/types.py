@@ -496,11 +496,13 @@ class ReportResource:
         href: Resource URI path.
         etag: Entity tag for version tracking.
         ics_data: Raw iCalendar content, if requested via calendar-data property.
+        deleted: True if the resource was removed (HTTP 404 tombstone in sync-collection).
     """
 
     href: str
     etag: str
     ics_data: str | None = None
+    deleted: bool = False
 
     @cached_property
     def normalized_etag(self) -> str:
