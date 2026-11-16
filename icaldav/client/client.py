@@ -17,7 +17,7 @@ from typing import Self
 import aiohttp
 
 from icaldav.client.auth import AuthProfile
-from icaldav.client.exceptions import CalDavAuthError
+from icaldav.client.exceptions import CalDavAuthError, CalDavError
 from icaldav.store.types import PropertyTag, ReportResource
 from icaldav.xml.propfind.models import PropfindItem
 from icaldav.xml.propfind.request import build_propfind_xml
@@ -31,6 +31,7 @@ from icaldav.xml.report.request import (
     build_sync_collection_xml,
 )
 from icaldav.xml.report.response import (
+    is_valid_sync_token_error,
     parse_report_response,
     parse_sync_collection_response,
 )
@@ -490,8 +491,12 @@ class CalDavClient:
         }
 
         async with session.request("REPORT", url, data=body, headers=headers) as resp:
-            self._check_response(resp)
             content = await resp.read()
+            if resp.status == 403 and is_valid_sync_token_error(content):
+                raise CalDavError(
+                    f"Invalid or expired sync-token for {url} (HTTP {resp.status})"
+                )
+            self._check_response(resp)
             return parse_sync_collection_response(content)
 
     async def sync_collection(

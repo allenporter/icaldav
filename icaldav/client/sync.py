@@ -47,12 +47,13 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 
+import aiohttp
 from ical.calendar import Calendar
 from ical.calendar_stream import CalendarStream
 from ical.exceptions import CalendarError
 
 from icaldav.client.client import CalDavClient
-from icaldav.client.exceptions import CalDavError
+from icaldav.client.exceptions import CalDavAuthError, CalDavError
 from icaldav.store.types import (
     CalendarResource,
     CollectionPath,
@@ -134,24 +135,37 @@ class CalDavSyncManager:
             SyncResult dataclass detailing changes applied to LocalStore.
         """
         if not force_full_sync:
+            stored_token = await self.store.get_sync_token(self.collection_path) or ""
             try:
-                return await self._sync_via_sync_collection()
-            except CalDavError as err:
+                results, server_token = await self.client.sync_collection(
+                    self.collection_url, sync_token=stored_token, auto_paginate=True
+                )
+            except CalDavAuthError:
+                raise
+            except (CalDavError, aiohttp.ClientResponseError) as err:
+                if (
+                    isinstance(err, aiohttp.ClientResponseError)
+                    and err.status >= 500
+                    and err.status != 501
+                ):
+                    raise
                 _LOGGER.debug(
                     "RFC 6578 sync-collection failed or unsupported (%s); falling back to ETag diff",
                     err,
                 )
                 # Clear invalid sync token on failure
                 await self.store.set_sync_token(self.collection_path, "")
+            else:
+                return await self._sync_via_sync_collection(results, server_token)
 
         return await self._sync_via_etag_diff()
 
-    async def _sync_via_sync_collection(self) -> SyncResult:
+    async def _sync_via_sync_collection(
+        self,
+        results: list[ReportResource],
+        server_token: str | None,
+    ) -> SyncResult:
         """Execute incremental sync using RFC 6578 WebDAV Collection Synchronization."""
-        stored_token = await self.store.get_sync_token(self.collection_path) or ""
-        results, server_token = await self.client.sync_collection(
-            self.collection_url, sync_token=stored_token, auto_paginate=True
-        )
 
         local_etags = await self.store.get_etags(self.collection_path)
         local_etags_norm = {
